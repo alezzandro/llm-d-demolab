@@ -1,0 +1,80 @@
+Generate a clear, professional flow diagram and architecture image
+(landscape, 16:9, white background, 300 DPI print quality) that illustrates
+the end-to-end use case of this conference booth demo:
+"Governed multi-tenant LLM inference with prefix-cache optimization."
+
+Use the Red Hat color palette: Red (#EE0000) accents, dark gray (#333333)
+text, light warm gray (#F5F5F5) background panels. Flat modern style, no 3D.
+
+═══════════════════════════════════════════════════════════════════
+SECTION 1 — LEFT: "Model Lifecycle" (vertical flow, top to bottom)
+═══════════════════════════════════════════════════════════════════
+
+Box 1: "Red Hat AI Model Catalog"
+  Small label: "Validated Llama 3.1 8B Instruct FP8 ModelCar"
+  ↓ arrow labeled "register"
+Box 2: "Model Registry v1.5"
+  Small label: "Version control + OCI URI"
+  ↓ arrow labeled "deploy"
+Box 3: "LLMInferenceService (llm-d)"
+  Small label: "4 replicas × NVIDIA L4 — prefix caching ON"
+  ↓ arrow labeled "expose"
+Box 4: "MaaS Gateway + Kuadrant / Authorino"
+  Small label: "API keys, rate limits, cost-center metering"
+
+═══════════════════════════════════════════════════════════════════
+SECTION 2 — CENTER: "Runtime Request Flow" (horizontal swim-lane)
+═══════════════════════════════════════════════════════════════════
+
+Show two parallel request paths (color-coded):
+
+PATH A (blue):
+  "Developer in Dev Spaces" (person-at-laptop icon)
+  → "Continue AI extension sends prompt"
+  → "Bearer devspaces-key"
+  → "MaaS Gateway validates quota (50k tok/h)"
+  → "EPP: prefix-cache-scorer picks warm replica"
+  → "vLLM replica #2 (KV cache HIT — shared prefix)"
+  → "Completion returned"
+  Badge: "engineering-tools cost center"
+
+PATH B (orange):
+  "Ops engineer in Open WebUI" (chat-bubble icon)
+  → "Chat sends prompt"
+  → "Bearer chatbot-key"
+  → "MaaS Gateway validates quota (100k tok/h)"
+  → "EPP routes to best replica"
+  → "vLLM replica #4"
+  → "Completion returned"
+  Badge: "customer-support cost center"
+
+Between the two paths show a shared GPU pool: four boxes labeled
+"vLLM 0 / L4", "vLLM 1 / L4", "vLLM 2 / L4", "vLLM 3 / L4" with
+a glow/highlight on the replica that gets a cache HIT for PATH A.
+
+═══════════════════════════════════════════════════════════════════
+SECTION 3 — RIGHT: "Booth Beat — Prefix Cache Lab"
+═══════════════════════════════════════════════════════════════════
+
+Show a simplified browser screenshot mockup of the Prefix Cache Lab UI:
+  • Two bar charts side by side: "Unique Prefixes" (tall red bars) vs
+    "Shared Prefixes" (short green bars)
+  • A big callout: "TTFT p95 improved 23–32%"
+  Below it a second chart: "EPP vs naive LB @ concurrency 64"
+  • Two bars: "Naive 24,391 ms" (very tall red) vs "llm-d 478 ms" (tiny green)
+  • Callout: "98% reduction"
+
+═══════════════════════════════════════════════════════════════════
+FOOTER STRIP
+═══════════════════════════════════════════════════════════════════
+
+A thin banner at the bottom:
+Left: Red Hat logo + "OpenShift AI 3.4"
+Center: "Same GPUs. Governed access. Optimized tail latency."
+Right: "4× NVIDIA L4 — Llama 3.1 8B FP8 — OpenShift 4.22"
+
+OVERALL STYLE:
+  Enterprise conference poster quality. Arrows should be clean and labeled.
+  Group each section inside a rounded-corner panel with a subtle shadow.
+  Use icons (GPU chip, person, chat bubble, bar chart, key/lock) to
+  reinforce meaning without clutter.

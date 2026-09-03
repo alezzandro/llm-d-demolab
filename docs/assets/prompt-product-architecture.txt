@@ -1,0 +1,51 @@
+Generate a clean, professional, high-resolution technical architecture diagram
+(landscape orientation, 16:9 aspect ratio, white background) showing the
+Red Hat products and open-source components used in this demo platform.
+
+Use the official Red Hat color palette: Red (#EE0000) for Red Hat product
+boxes, dark gray (#333333) for labels, light gray (#F5F5F5) for background
+zones, and white for boxes. Use flat, modern iconography — no 3D effects.
+
+LAYOUT — three horizontal swim-lanes inside a rounded rectangle labeled
+"Red Hat OpenShift 4.22 + OpenShift AI 3.4 (AWS)":
+
+TOP LANE — "Platform & Governance":
+  • Red Hat OpenShift (container platform icon)
+  • Red Hat OpenShift AI 3.4 (brain/AI icon)
+    - Model Catalog
+    - Model Registry
+    - Models-as-a-Service (MaaS) with Kuadrant / Authorino
+    - Data Science Cluster
+  • NVIDIA GPU Operator + Node Feature Discovery (green GPU chip icon)
+  • Cluster Observability Operator + Perses dashboards
+
+MIDDLE LANE — "LLM Serving (llm-d)":
+  • LLMInferenceService custom resource box
+    Inside it show four identical vLLM replica boxes (labeled "vLLM 0.18 + FP8")
+    each sitting on a small GPU icon labeled "NVIDIA L4 24 GB"
+  • Endpoint Picker (EPP) box with three sub-labels:
+    prefix-cache-scorer, queue-scorer, active-request-scorer
+  • KV Cache Indexer connecting EPP to the replicas
+  • Arrow from Gateway (top lane) through EPP into the replicas
+  • A badge on vLLM boxes: "--enable-prefix-caching"
+
+BOTTOM LANE — "Consumers":
+  • Red Hat OpenShift Dev Spaces + Continue AI (laptop + code icon)
+    Label: "devspaces-subscription — 50k tokens/h — engineering-tools"
+  • Open WebUI (chat bubble icon)
+    Label: "chatbot-subscription — 100k tokens/h — customer-support"
+  • Prefix Cache Lab (bar-chart icon, labeled "Booth UI — TTFT comparison")
+  • All three consumers point upward through "MaaS Gateway" into the middle lane
+
+RIGHT SIDE — small "Model Lifecycle" vertical strip:
+  Model Catalog → Model Registry → LLMInferenceService → MaaSModelRef
+
+ADDITIONAL DETAILS:
+  • Show the model name "Llama 3.1 8B Instruct FP8 (ModelCar)" near the
+    LLMInferenceService box
+  • Label the AWS infrastructure: "4× g6.2xlarge instances (1× L4 GPU each)"
+  • Include the Red Hat logo in the top-left corner and "OpenShift AI" branding
+  • Use thin connection arrows with labels: "HTTPS / OpenAI-compatible API",
+    "Bearer token + quota", "gRPC KV index"
+  • Overall style: enterprise whitepaper quality, suitable for a conference
+    slide deck or printed handout at 300 DPI

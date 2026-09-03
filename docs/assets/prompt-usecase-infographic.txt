@@ -1,0 +1,93 @@
+Generate a visually striking, modern infographic image (portrait orientation,
+9:16 or 3:4 aspect ratio, 300 DPI) that tells the story of this demo use case
+in a single glance. Target audience: conference booth visitors with 30 seconds
+of attention.
+
+Theme: "One Model Pool — Governed Access — Optimized Latency"
+Style: Bold Red Hat branding, flat illustration, large typography, data-viz
+callouts. Colors: Red (#EE0000), dark gray (#333333), white, accent green
+(#3E8635) for "good" metrics, accent amber (#F0AB00) for "before" metrics.
+
+═══════════════════════════════════════════════════════════════════
+TOP BANNER (20% of height)
+═══════════════════════════════════════════════════════════════════
+
+Large bold title:
+  "Governed Multi-Tenant LLM Serving on OpenShift AI"
+Subtitle (smaller):
+  "Models-as-a-Service + llm-d Prefix-Cache Routing"
+Red Hat + OpenShift AI logos on the right edge.
+
+═══════════════════════════════════════════════════════════════════
+SECTION A — "The Problem" (15% of height, amber/warm background strip)
+═══════════════════════════════════════════════════════════════════
+
+Illustration: a GPU chip icon with a dollar sign, surrounded by multiple
+team icons (dev, ops, data science) all pointing at it.
+
+Three short bullet callouts with icons:
+  🔑  "Multiple teams need the same LLM — who gets access?"
+  💰  "GPUs are expensive — how do you share without waste?"
+  ⏱️  "Round-robin LB recomputes prompts — P95 latency explodes"
+
+═══════════════════════════════════════════════════════════════════
+SECTION B — "The Solution" (30% of height, white background)
+═══════════════════════════════════════════════════════════════════
+
+Three columns, each with a large icon on top, a bold label, and 2-3 lines
+of text beneath:
+
+Column 1 — Key icon (#EE0000):
+  "Models-as-a-Service"
+  "Independent API keys, rate limits, and cost centers per team.
+   Same model weights — zero GPU duplication."
+
+Column 2 — Speedometer icon (#3E8635):
+  "llm-d Prefix-Cache Routing"
+  "Endpoint Picker steers traffic to the replica that already has the
+   KV-cache prefix → up to 98% P95 TTFT reduction."
+
+Column 3 — Shield/catalog icon (#333333):
+  "Model Catalog & Registry"
+  "Red Hat validated ModelCar. Version-controlled. Audit-ready.
+   Llama 3.1 8B Instruct FP8 on 4× NVIDIA L4."
+
+═══════════════════════════════════════════════════════════════════
+SECTION C — "By the Numbers" (20% of height, light gray background)
+═══════════════════════════════════════════════════════════════════
+
+Two large data-viz callout cards side by side:
+
+Card 1 (left, green border):
+  Giant number: "98%"
+  Subtitle: "P95 TTFT Reduction"
+  Small text: "24,391 ms → 478 ms at concurrency 64"
+  A tiny horizontal bar chart showing the before (long red) / after (short green)
+
+Card 2 (right, green border):
+  Giant number: "2 Teams, 1 Pool"
+  Subtitle: "Governed & Metered"
+  Icon row: Dev Spaces icon "50k tok/h" | Open WebUI icon "100k tok/h"
+  Small text: "Separate keys, quotas, cost centers — same GPUs"
+
+═══════════════════════════════════════════════════════════════════
+SECTION D — "See It Live" (10% of height, red background strip)
+═══════════════════════════════════════════════════════════════════
+
+White text on red:
+  "Visit our booth → Prefix Cache Lab live comparison → Dev Spaces
+   AI-assisted Ansible → Open WebUI ops chatbot"
+Small icons: browser window, code editor, chat bubble
+
+═══════════════════════════════════════════════════════════════════
+FOOTER (5% of height)
+═══════════════════════════════════════════════════════════════════
+
+Thin dark gray bar:
+  Left: "Red Hat OpenShift AI 3.4 | OpenShift 4.22 | 4× NVIDIA L4"
+  Right: Red Hat logo
+
+OVERALL QUALITY:
+  Print-ready at A2 poster size. Sharp vector-style edges. Text must be
+  legible at arm's length. No photographic backgrounds — purely illustrated
+  flat design with the Red Hat geometric aesthetic.
