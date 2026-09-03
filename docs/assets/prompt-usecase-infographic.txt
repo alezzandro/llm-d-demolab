@@ -1,5 +1,5 @@
-Generate a visually striking, modern infographic image (portrait orientation,
-9:16 or 3:4 aspect ratio, 300 DPI) that tells the story of this demo use case
+Generate a visually striking, modern infographic image (landscape orientation,
+16:9, white background, 300 DPI print quality) that tells the story of this demo use case
 in a single glance. Target audience: conference booth visitors with 30 seconds
 of attention.
 
