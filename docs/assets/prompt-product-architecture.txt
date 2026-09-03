@@ -5,47 +5,141 @@ Red Hat products and open-source components used in this demo platform.
 Use the official Red Hat color palette: Red (#EE0000) for Red Hat product
 boxes, dark gray (#333333) for labels, light gray (#F5F5F5) for background
 zones, and white for boxes. Use flat, modern iconography — no 3D effects.
+Label every arrow with protocol, direction, and purpose. Use solid arrows for
+live runtime paths and dashed arrows for admin/provisioning or conceptual
+future paths.
 
-LAYOUT — three horizontal swim-lanes inside a rounded rectangle labeled
-"Red Hat OpenShift 4.22 + OpenShift AI 3.4 (AWS)":
+LAYOUT — three horizontal swim-lanes (top to bottom) inside a rounded
+rectangle labeled "Red Hat OpenShift 4.22 + OpenShift AI 3.4 (AWS)":
 
-TOP LANE — "Platform & Governance":
-  • Red Hat OpenShift (container platform icon)
-  • Red Hat OpenShift AI 3.4 (brain/AI icon)
-    - Model Catalog
-    - Model Registry
-    - Models-as-a-Service (MaaS) with Kuadrant / Authorino
-    - Data Science Cluster
-  • NVIDIA GPU Operator + Node Feature Discovery (green GPU chip icon)
-  • Cluster Observability Operator + Perses dashboards
+═══════════════════════════════════════════════════════════════════
+TOP LANE — "Consumers" (user-facing applications)
+═══════════════════════════════════════════════════════════════════
 
-MIDDLE LANE — "LLM Serving (llm-d)":
-  • LLMInferenceService custom resource box
-    Inside it show four identical vLLM replica boxes (labeled "vLLM 0.18 + FP8")
-    each sitting on a small GPU icon labeled "NVIDIA L4 24 GB"
-  • Endpoint Picker (EPP) box with three sub-labels:
-    prefix-cache-scorer, queue-scorer, active-request-scorer
-  • KV Cache Indexer connecting EPP to the replicas
-  • Arrow from Gateway (top lane) through EPP into the replicas
-  • A badge on vLLM boxes: "--enable-prefix-caching"
+Three consumer boxes side by side:
 
-BOTTOM LANE — "Consumers":
-  • Red Hat OpenShift Dev Spaces + Continue AI (laptop + code icon)
-    Label: "devspaces-subscription — 50k tokens/h — engineering-tools"
-  • Open WebUI (chat bubble icon)
-    Label: "chatbot-subscription — 100k tokens/h — customer-support"
-  • Prefix Cache Lab (bar-chart icon, labeled "Booth UI — TTFT comparison")
-  • All three consumers point upward through "MaaS Gateway" into the middle lane
+1. "Red Hat OpenShift Dev Spaces + Continue AI"
+   Namespace: openshift-devspaces
+   Label: devspaces-subscription | 50k tokens/h | costCenter: engineering-tools
+   Icon: laptop + code editor
 
-RIGHT SIDE — small "Model Lifecycle" vertical strip:
-  Model Catalog → Model Registry → LLMInferenceService → MaaSModelRef
+2. "Open WebUI"
+   Namespace: open-webui
+   Label: chatbot-subscription | 100k tokens/h | costCenter: customer-support
+   Icon: chat bubble
 
-ADDITIONAL DETAILS:
-  • Show the model name "Llama 3.1 8B Instruct FP8 (ModelCar)" near the
-    LLMInferenceService box
-  • Label the AWS infrastructure: "4× g6.2xlarge instances (1× L4 GPU each)"
-  • Include the Red Hat logo in the top-left corner and "OpenShift AI" branding
-  • Use thin connection arrows with labels: "HTTPS / OpenAI-compatible API",
-    "Bearer token + quota", "gRPC KV index"
-  • Overall style: enterprise whitepaper quality, suitable for a conference
-    slide deck or printed handout at 300 DPI
+3. "Prefix Cache Lab" (booth UI)
+   Namespace: prefix-cache-lab
+   Label: reuses chatbot API key | TTFT unique vs shared comparison
+   Icon: bar chart
+
+FROM EACH CONSUMER — draw three labeled outbound arrows that merge into one
+downward path:
+
+  Arrow A: "HTTPS POST /v1/chat/completions (OpenAI-compatible JSON)"
+  Arrow B: "Authorization: Bearer <MaaS subscription API key>"
+  Arrow C: "Model id: llama-3-1-8b-instruct-fp8"
+
+All three consumers target the SAME external URL pattern:
+  https://maas.<cluster-domain>/models-as-a-service/llama-3-1-8b-fp8/v1
+
+═══════════════════════════════════════════════════════════════════
+MIDDLE LANE — "MaaS Gateway + LLM Serving (llm-d)"
+═══════════════════════════════════════════════════════════════════
+
+Split this lane into two connected zones (left = ingress/governance,
+right = inference workloads):
+
+LEFT ZONE — "MaaS Ingress & Governance" (namespace: openshift-ingress /
+models-as-a-service control plane):
+
+  Box: "maas-default-gateway" (Gateway API, data-science-gateway-class)
+    ↓ labeled "HTTPRoute attachment from LLMInferenceService"
+  Box: "Authorino" — validates API key → MaaSSubscription binding
+    ↓ labeled "subscription quota + auth policy check"
+  Box: "Kuadrant" — enforces token rate limits per subscription
+    ↓ labeled "policy pass → route to model backend"
+  Box: "MaaSModelRef (llama-3-1-8b)" — registers the model pool with MaaS
+    Small note: "links LLMInferenceService to MaaS catalog entry"
+
+Draw a solid downward arrow from the merged consumer path into
+maas-default-gateway, then a horizontal chain through Authorino → Kuadrant
+→ HTTPRoute backend selection.
+
+RIGHT ZONE — "LLMInferenceService llama-3-1-8b-fp8" (namespace: models-as-a-service):
+
+  Outer box labeled "LLMInferenceService (KServe / llm-d)"
+  Model: "Llama 3.1 8B Instruct FP8 ModelCar"
+  Inside show:
+
+  • "Kubernetes Service (booth v1 live path)" — solid arrow from HTTPRoute
+    into this Service, then fan-out arrows to four replica boxes:
+      "vLLM 0.18 replica 1" on "NVIDIA L4 24 GB"
+      "vLLM 0.18 replica 2" on "NVIDIA L4 24 GB"
+      "vLLM 0.18 replica 3" on "NVIDIA L4 24 GB"
+      "vLLM 0.18 replica 4" on "NVIDIA L4 24 GB"
+    Label the Service fan-out: "round-robin Service LB (booth v1)"
+    Badge on each vLLM box: "--enable-prefix-caching"
+
+  • "Endpoint Picker (EPP)" + "KV Cache Indexer" — show as a DASHED box
+    group to the side (not on the live request path in booth v1):
+      Sub-labels: prefix-cache-scorer (w3), queue-scorer (w2),
+      active-request-scorer (w2)
+    Dashed arrow from EPP to replicas labeled:
+      "conceptual llm-d routing — prefix-aware replica selection
+       (leave-behind; InferencePool not on live MaaS path in RHOAI 3.4.2)"
+
+  Response path — draw return arrows upward from the selected vLLM replica
+  back through Service → HTTPRoute → Gateway → consumer, labeled:
+    "JSON chat completion + token usage recorded by MaaS"
+
+═══════════════════════════════════════════════════════════════════
+BOTTOM LANE — "Platform & Governance" (foundation layer)
+═══════════════════════════════════════════════════════════════════
+
+Show these as foundational boxes that underpin the middle lane (draw thin
+upward support arrows, not request-path arrows):
+
+  • "Red Hat OpenShift 4.22" — container platform, Routes, RBAC, SCCs
+  • "Red Hat OpenShift AI 3.4 — DataScienceCluster"
+      Sub-components inside: KServe, Models-as-a-Service, Model Registry,
+      OpenShift AI Dashboard
+  • "Model Catalog" (Red Hat AI validated models)
+  • "Model Registry" — versioned ModelCar URI storage
+  • "HardwareProfile gpu-l4-nvidia" — dashboard GPU template
+  • "NVIDIA GPU Operator + Node Feature Discovery"
+      Label: "schedules pods on worker-gpu nodes, exposes nvidia.com/gpu"
+      Draw upward arrows from GPU Operator to each L4 GPU under vLLM replicas
+  • "Cluster Observability Operator + Perses dashboards"
+      Namespace: redhat-ods-monitoring
+      Dashed side arrows FROM vLLM PodMonitor (:8000 /metrics) and FROM
+      DCGM exporter TO Perses, labeled: "vLLM + GPU utilization metrics"
+
+ADMIN / PROVISIONING PATH (dashed, left-to-right across bottom lane):
+  "Model Catalog" → "Model Registry (register ModelCar v1.5)"
+    → "Deploy LLMInferenceService (4 replicas)"
+    → "MaaSModelRef + MaaSSubscription ×2 + MaaSAuthPolicy ×2"
+    → "Consumers wired with per-subscription API keys"
+  Label this dashed path: "operator-driven setup (not per-request traffic)"
+
+═══════════════════════════════════════════════════════════════════
+RIGHT SIDE — "Connection Legend" mini-panel
+═══════════════════════════════════════════════════════════════════
+
+  Solid arrow  = live runtime request/response
+  Dashed arrow = admin provisioning or conceptual future routing
+  Red accent   = Red Hat product
+  Green chip   = NVIDIA GPU
+
+═══════════════════════════════════════════════════════════════════
+ADDITIONAL DETAILS
+═══════════════════════════════════════════════════════════════════
+
+  • AWS infrastructure label: "4× g6.2xlarge (1× NVIDIA L4 each)"
+  • Red Hat logo top-left; "OpenShift AI" branding top-right
+  • Ensure arrow labels are readable: HTTPS, Bearer token, HTTPRoute,
+    Service LB, gRPC KV index (EPP only, dashed), Prometheus scrape
+  • Do NOT show EPP on the same solid path as live MaaS traffic — booth v1
+    uses Service load-balancing; EPP is the llm-d routing story (dashed)
+  • Overall style: enterprise whitepaper quality, conference slide or
+    printed handout at 300 DPI
