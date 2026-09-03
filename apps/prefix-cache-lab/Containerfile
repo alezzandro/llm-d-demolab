@@ -1,0 +1,31 @@
+# Multi-stage UBI9 build for the Prefix Cache Lab booth UI.
+FROM registry.access.redhat.com/ubi9/python-312:1 AS builder
+
+USER 0
+WORKDIR /opt/app-root/src
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/opt/app-root -r requirements.txt
+
+COPY app ./app
+COPY templates ./templates
+COPY static ./static
+COPY data ./data
+
+FROM registry.access.redhat.com/ubi9/python-312:1
+
+USER 0
+WORKDIR /opt/app-root/src
+
+COPY --from=builder /opt/app-root /opt/app-root
+COPY --from=builder /opt/app-root/src /opt/app-root/src
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    EPP_BASELINE_PATH=/opt/app-root/src/data/epp-baseline.json \
+    HOME=/opt/app-root/src
+
+EXPOSE 8080
+USER 1001
+
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

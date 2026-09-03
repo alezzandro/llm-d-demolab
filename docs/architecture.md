@@ -1,0 +1,111 @@
+# Architecture
+
+## Overview
+
+Governed multi-consumer LLM serving on OpenShift AI 3.4: **MaaS** for who/how-much, **llm-d** for how-fast on the same 4× L4 pool.
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     OpenShift 4.22 + RHOAI 3.4 (AWS)                        │
+│                                                                            │
+│  Catalog → Registry → LLMInferenceService (4× vLLM + EPP)                 │
+│                              ▲                                             │
+│                              │                                             │
+│                    maas-default-gateway                                    │
+│                    Kuadrant / Authorino                                    │
+│                              ▲                                             │
+│              ┌───────────────┴────────────────┐                            │
+│              │                                │                            │
+│     Dev Spaces + Continue              Open WebUI                          │
+│     (devspaces-subscription)           (chatbot-subscription)              │
+│     costCenter: engineering-tools      costCenter: customer-support        │
+│                                                                            │
+│     Prefix Cache Lab (booth UI) ──► same MaaS endpoint (ops key)           │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+## llm-d serving path
+
+```
+Client (MaaS API key)
+  → Gateway (maas-default-gateway)
+  → Authorino / subscription quota
+  → Endpoint Picker (EPP)
+       plugins: prefix-cache-scorer (w3), queue-scorer (w2), active-request-scorer (w2)
+  → vLLM replica with matching KV prefix (1 of 4 L4 GPUs)
+```
+
+**Why EPP matters:** naive LB across replicas recomputes shared prefixes (~25% KV hit rate). Prefix-cache-aware routing targets 80–90%+ hits and collapses P95 TTFT under concurrency.
+
+## Component map
+
+| Component | Purpose | Namespace |
+|---|---|---|
+| DataScienceCluster | KServe + MaaS + ModelRegistry | cluster-scoped |
+| HardwareProfile `gpu-l4-nvidia` | Dashboard GPU template | `redhat-ods-applications` |
+| `LLMInferenceService` `llama-3-1-8b-fp8` | 4-replica llm-d serving | `models-as-a-service` |
+| `MaaSModelRef` `llama-3-1-8b` | Registers pool with MaaS | `models-as-a-service` |
+| MaaSSubscription ×2 | Independent quotas / cost centers | `models-as-a-service` |
+| MaaSAuthPolicy ×2 | Group → model access | `models-as-a-service` |
+| CheCluster | Dev Spaces | `openshift-devspaces` |
+| Open WebUI | Ops chat UI | `open-webui` |
+| Prefix Cache Lab | Booth unique/shared TTFT microbench UI | `prefix-cache-lab` |
+| Perses / UWM | MaaS usage + model metrics | `redhat-ods-monitoring` |
+
+## Dual-subscription punchline
+
+Same model weights and GPU pool; separate API keys, rate limits, and cost-center metadata:
+
+| Consumer | Group | Subscription | Limit (demo) | Cost center |
+|---|---|---|---|---|
+| Dev Spaces / Continue | `devspaces-users` | `devspaces-subscription` | 50k tokens / 1h | `engineering-tools` |
+| Open WebUI | `chatbot-users` | `chatbot-subscription` | 100k tokens / 1h | `customer-support` |
+
+## Request flow (consumer)
+
+```
+User (Continue or Open WebUI)
+  → POST .../models-as-a-service/llama-3-1-8b-fp8/v1/chat/completions
+  → Authorization: Bearer <subscription-api-key>
+  → Gateway + Authorino validate key + quota
+  → EPP picks replica with best prefix / queue score
+  → vLLM returns completion; MaaS records token usage
+```
+
+## Model lifecycle (demo narrative)
+
+```
+Model Catalog (Red Hat AI)
+  → Register in Model Registry (version + ModelCar URI)
+  → Deploy LLMInferenceService (llm-d, replicas=4)
+  → MaaSModelRef + dual subscriptions
+  → Consumers: Dev Spaces + Open WebUI
+```
+
+## Hardware
+
+- **4×** AWS `g6.2xlarge` (NVIDIA L4 ~24GB each)
+- One GPU per vLLM replica; no tensor parallelism for this 8B FP8 model
+- Node selector / toleration: `worker-gpu` + `nvidia.com/gpu`
+
+## Out of scope (v1) / dry-run notes
+
+- Gen AI Playground / LlamaStack
+- Side-by-side live naive LB deployment (would need 8 GPUs)
+- Full 300s GuideLLM during booth hours (prep-day / canned numbers only)
+
+### RHOAI 3.4.2 + MaaS + InferencePool (validated on dry-run)
+
+Enabling the well-known scheduler preset (`v3-4-2-kserve-config-llm-scheduler`) or embedding a showroom-style custom EPP config causes **`/v1/chat/completions` through the MaaS gateway to return HTTP 200 with an empty body**. Direct calls to vLLM pods work; `/v1/models` through MaaS also works. Traffic to `InferencePool` backends is affected; switching the HTTPRoute backends back to the workload `Service` restores chat completions.
+
+**Booth v1 serving choice:** `LLMInferenceService` with **4 replicas**, `--enable-prefix-caching`, MaaS gateway, and **Service** load-balancing (no InferencePool/EPP on the request path). Use [`docs/assets/baseline-comparison.md`](assets/baseline-comparison.md) for the prefix-cache-aware routing P95 story until the MaaS+InferencePool response-body issue is fixed upstream.
+
+**Prefix Cache Lab UI** (`apps/prefix-cache-lab`, namespace `prefix-cache-lab`): FastAPI booth page that issues concurrent streamed chat completions through MaaS — **unique** prefixes vs a **shared** system prompt — and charts TTFT live. It does **not** toggle the vLLM flag or enable InferencePool; the EPP chart on the page is the canned leave-behind. Deployed by [`setup/12-prefix-cache-lab.sh`](../setup/12-prefix-cache-lab.sh).
+
+**Served model id** (for API clients / Continue): `llama-3-1-8b-instruct-fp8` (not the CR name `llama-3-1-8b-fp8`).
+
+## References
+
+- [OpenShift AI 3 docs](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3/)
+- [KServe + llm-d article](https://developers.redhat.com/articles/2026/04/21/kserve-llm-d-optimized-gen-ai-inference)
+- [MaaS article](https://developers.redhat.com/articles/2026/03/24/run-model-service-multiple-llms-openshift)

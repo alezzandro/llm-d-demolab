@@ -1,0 +1,22 @@
+# Dashboard "connection" for the ModelCar OCI URI.
+# Required so AI hub → Deployments → Edit can extract form data
+# (llmd-serving validateExtraction: needs PVC, connections annotation, or imagePullSecrets).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: llama-3-1-8b-fp8-connection
+  namespace: models-as-a-service
+  labels:
+    opendatahub.io/dashboard: "true"
+    opendatahub.io/managed: "true"
+  annotations:
+    opendatahub.io/connection-type-ref: oci-v1
+    openshift.io/display-name: registry.redhat.io (Llama 3.1 8B ModelCar)
+    openshift.io/description: OCI registry host for the Llama 3.1 8B Instruct FP8 ModelCar
+type: Opaque
+stringData:
+  ACCESS_TYPE: '["Pull"]'
+  OCI_HOST: registry.redhat.io
+  # Public ModelCar; cluster global pull-secret already authenticates pod pulls.
+  # Empty auth entry satisfies the oci-v1 connection schema for the edit wizard.
+  .dockerconfigjson: '{"auths":{"registry.redhat.io":{}}}'

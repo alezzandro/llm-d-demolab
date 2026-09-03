@@ -1,0 +1,22 @@
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: prefix-cache-lab
+  namespace: prefix-cache-lab
+  labels:
+    app: prefix-cache-lab
+    app.kubernetes.io/part-of: llm-d-demolab
+spec:
+  output:
+    to:
+      kind: ImageStreamTag
+      name: prefix-cache-lab:latest
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  runPolicy: Serial
+  successfulBuildsHistoryLimit: 2
+  failedBuildsHistoryLimit: 2

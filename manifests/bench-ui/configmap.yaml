@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prefix-cache-lab-epp
+  namespace: prefix-cache-lab
+  labels:
+    app: prefix-cache-lab
+    app.kubernetes.io/part-of: llm-d-demolab
+data:
+  epp-baseline.json: |
+    {
+      "title": "Prefix-cache-aware routing (EPP) vs naive LB",
+      "subtitle": "Showroom leave-behind — 4× GPU, Llama 3.1 8B Instruct FP8, GuideLLM concurrent",
+      "note": "Live InferencePool/EPP through MaaS returns empty chat bodies on RHOAI 3.4.2. These numbers are the routing story; live buttons above prove prefix-caching under shared vs unique prompts.",
+      "series": [
+        {
+          "label": "Concurrent @ 32",
+          "metrics": [
+            {"name": "TTFT median (ms)", "naive": 1579.6, "llmd": 167.3},
+            {"name": "TTFT p95 (ms)", "naive": 7551.4, "llmd": 4677.0}
+          ]
+        },
+        {
+          "label": "Concurrent @ 64",
+          "metrics": [
+            {"name": "TTFT median (ms)", "naive": 4492.7, "llmd": 245.8},
+            {"name": "TTFT p95 (ms)", "naive": 24391.2, "llmd": 478.0}
+          ]
+        }
+      ],
+      "highlight": {
+        "label": "Wow metric — TTFT p95 @ concurrency 64",
+        "naive_ms": 24391.2,
+        "llmd_ms": 478.0,
+        "improvement_pct": 98
+      }
+    }

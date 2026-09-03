@@ -1,0 +1,58 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: llama-3-1-8b-fp8
+  namespace: models-as-a-service
+  labels:
+    opendatahub.io/dashboard: "true"
+    opendatahub.io/genai-asset: "true"
+  annotations:
+    opendatahub.io/hardware-profile-name: gpu-l4-nvidia
+    opendatahub.io/hardware-profile-namespace: redhat-ods-applications
+    opendatahub.io/model-type: generative
+    # Links to manifests/model/oci-connection.yaml — required for Deployments Edit wizard
+    opendatahub.io/connections: llama-3-1-8b-fp8-connection
+    openshift.io/display-name: llama-3-1-8b-fp8-llm-d
+    security.opendatahub.io/enable-auth: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8000"
+spec:
+  # Accelerator template only. Do NOT add v3-4-2-kserve-config-llm-scheduler
+  # while fronting MaaS on RHOAI 3.4.2: InferencePool/EPP returns HTTP 200 with
+  # an empty body for /v1/chat/completions (validated on dry-run). Multi-replica
+  # Service load-balancing + --enable-prefix-caching still demonstrates the
+  # multi-GPU pool; booth P95 numbers come from docs/assets/baseline-comparison.md.
+  baseRefs:
+    - name: v3-4-2-kserve-config-llm-template-nvidia-cuda
+  model:
+    uri: oci://registry.redhat.io/rhelai1/modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5
+    name: llama-3-1-8b-instruct-fp8
+  replicas: 4
+  router:
+    route: {}
+    gateway:
+      refs:
+        - name: maas-default-gateway
+          namespace: openshift-ingress
+  template:
+    nodeSelector:
+      node-role.kubernetes.io/worker-gpu: ""
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    containers:
+      - name: main
+        env:
+          - name: VLLM_ADDITIONAL_ARGS
+            # Open WebUI sends tool_choice=auto; requires auto tool choice + Llama 3.1 parser.
+            value: "--disable-uvicorn-access-log --max-model-len=16000 --enable-prefix-caching --enable-auto-tool-choice --tool-call-parser llama3_json"
+        resources:
+          requests:
+            cpu: "2"
+            memory: 8Gi
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "4"
+            memory: 16Gi
+            nvidia.com/gpu: "1"

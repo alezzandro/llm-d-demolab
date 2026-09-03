@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prefix-cache-lab
+  namespace: prefix-cache-lab
+  labels:
+    app: prefix-cache-lab
+    app.kubernetes.io/part-of: llm-d-demolab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prefix-cache-lab
+  template:
+    metadata:
+      labels:
+        app: prefix-cache-lab
+    spec:
+      containers:
+        - name: prefix-cache-lab
+          image: image-registry.openshift-image-registry.svc:5000/prefix-cache-lab/prefix-cache-lab:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: MAAS_BASE_URL
+              value: "MAAS_ENDPOINT_PLACEHOLDER"
+            - name: MAAS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: prefix-cache-lab-maas-apikey
+                  key: api-key
+            - name: MODEL_ID
+              value: llama-3-1-8b-instruct-fp8
+            - name: BENCH_CONCURRENCY
+              value: "4"
+            - name: BENCH_REQUESTS
+              value: "8"
+            - name: BENCH_MAX_TOKENS
+              value: "8"
+            - name: BENCH_PREFIX_CHARS
+              value: "512"
+            - name: EPP_BASELINE_PATH
+              value: /etc/prefix-cache-lab/epp-baseline.json
+          volumeMounts:
+            - name: epp-baseline
+              mountPath: /etc/prefix-cache-lab
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+      volumes:
+        - name: epp-baseline
+          configMap:
+            name: prefix-cache-lab-epp

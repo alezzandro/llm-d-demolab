@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prefix Cache Lab — llm-d</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@500;700&family=Red+Hat+Text:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="brand">Prefix Cache Lab</p>
+      <h1>See why <code>--enable-prefix-caching</code> matters</h1>
+      <p>
+        Same model, same four GPUs, same MaaS endpoint.
+        Unique prefixes miss the KV cache; a shared system prompt hits it.
+      </p>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="toolbar">
+      <button id="btn-unique" class="btn-unique" type="button">Run without shared prefix</button>
+      <button id="btn-shared" class="btn-shared" type="button">Run with shared prefix</button>
+      <button id="btn-compare" class="btn-primary" type="button">Run comparison</button>
+      <button id="btn-reset" class="btn-ghost" type="button">Reset results</button>
+      <div class="meta">
+        Model <strong>{{ model_id }}</strong> ·
+        {{ concurrency }} concurrent ·
+        {{ requests_per_run }} requests / mode
+      </div>
+    </div>
+
+    <div id="error" class="error" role="alert"></div>
+
+    <div id="progress" class="progress" aria-live="polite">
+      <div id="progress-text">Running…</div>
+      <div class="progress-bar"><span></span></div>
+    </div>
+
+    <section id="results" class="results" hidden>
+      <div class="panel">
+        <h2>Live request latency</h2>
+        <p class="hint">End-to-end chat latency across the burst (non-stream). Lower is better when prefixes hit the KV cache.</p>
+        <div class="chart-wrap">
+          <canvas id="ttft-chart"></canvas>
+        </div>
+        <div class="stats">
+          <div class="stat unique">
+            <span class="k">Unique median</span>
+            <span class="v" id="unique-median">—</span>
+          </div>
+          <div class="stat unique">
+            <span class="k">Unique p95</span>
+            <span class="v" id="unique-p95">—</span>
+          </div>
+          <div class="stat shared">
+            <span class="k">Shared median</span>
+            <span class="v" id="shared-median">—</span>
+          </div>
+          <div class="stat shared">
+            <span class="k">Shared p95</span>
+            <span class="v" id="shared-p95">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel win">
+        <div class="label">Improvement</div>
+        <div class="value" id="win-value">—</div>
+        <p class="sub" id="win-sub">Run both modes to compare</p>
+      </div>
+    </section>
+
+    <section class="secondary panel">
+      <h2>{{ epp.title }}</h2>
+      <p class="hint">{{ epp.subtitle }}</p>
+      <p class="note">{{ epp.note }}</p>
+      <div class="epp-grid">
+        <div class="chart-wrap">
+          <canvas id="epp-chart"></canvas>
+        </div>
+        {% if epp.highlight %}
+        <div class="highlight">
+          <div class="label" style="text-transform:uppercase;letter-spacing:.06em;font-size:.78rem;color:#3d3d3d;">
+            {{ epp.highlight.label }}
+          </div>
+          <div class="big">{{ epp.highlight.improvement_pct }}% faster</div>
+          <p class="sub" style="margin:.4rem 0 0;color:#3d3d3d;">
+            {{ epp.highlight.naive_ms }} ms → {{ epp.highlight.llmd_ms }} ms TTFT p95
+          </p>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+
+    <footer class="footer">
+      Live buttons demonstrate prefix-caching under shared vs unique prompts on the deployed
+      multi-GPU pool (<code>--enable-prefix-caching</code>). The chart above is the separate
+      prefix-cache-aware routing (EPP) leave-behind from the llm-d showroom.
+    </footer>
+  </main>
+
+  <script id="epp-data" type="application/json">{% autoescape false %}{{ epp | tojson }}{% endautoescape %}</script>
+</body>
+</html>

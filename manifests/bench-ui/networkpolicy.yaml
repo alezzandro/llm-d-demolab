@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: prefix-cache-lab
+  namespace: prefix-cache-lab
+  labels:
+    app: prefix-cache-lab
+spec:
+  podSelector:
+    matchLabels:
+      app: prefix-cache-lab
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # OpenShift router + same-namespace probes
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              network.openshift.io/policy-group: ingress
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    # MaaS is reached via the cluster Route (external URL); allow cluster + egress.
+    - {}

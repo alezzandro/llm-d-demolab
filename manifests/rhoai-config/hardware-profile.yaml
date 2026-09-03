@@ -1,0 +1,44 @@
+# RHOAI 3.4 HardwareProfile schema:
+# - display name / description / enabled live in metadata.annotations
+# - node placement lives under spec.scheduling (type: Node)
+apiVersion: infrastructure.opendatahub.io/v1
+kind: HardwareProfile
+metadata:
+  name: gpu-l4-nvidia
+  namespace: redhat-ods-applications
+  labels:
+    opendatahub.io/dashboard: "true"
+  annotations:
+    opendatahub.io/dashboard-feature-visibility: '["model-serving"]'
+    opendatahub.io/display-name: "NVIDIA L4 GPU"
+    opendatahub.io/description: "Single NVIDIA L4 GPU (24GB VRAM) for model serving"
+    opendatahub.io/disabled: "false"
+spec:
+  identifiers:
+    - displayName: CPU
+      identifier: cpu
+      resourceType: CPU
+      defaultCount: 2
+      maxCount: 8
+      minCount: 1
+    - displayName: Memory
+      identifier: memory
+      resourceType: Memory
+      defaultCount: 8Gi
+      maxCount: 32Gi
+      minCount: 4Gi
+    - displayName: "NVIDIA GPU"
+      identifier: nvidia.com/gpu
+      resourceType: Accelerator
+      defaultCount: 1
+      maxCount: 1
+      minCount: 1
+  scheduling:
+    type: Node
+    node:
+      nodeSelector:
+        node-role.kubernetes.io/worker-gpu: ""
+      tolerations:
+        - effect: NoSchedule
+          key: nvidia.com/gpu
+          operator: Exists

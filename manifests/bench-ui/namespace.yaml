@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: prefix-cache-lab
+  labels:
+    app.kubernetes.io/part-of: llm-d-demolab
+    app.kubernetes.io/component: prefix-cache-lab
+  annotations:
+    openshift.io/display-name: Prefix Cache Lab
