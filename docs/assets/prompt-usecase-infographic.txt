@@ -7,87 +7,127 @@ Theme: "One Model Pool — Governed Access — Optimized Latency"
 Style: Bold Red Hat branding, flat illustration, large typography, data-viz
 callouts. Colors: Red (#EE0000), dark gray (#333333), white, accent green
 (#3E8635) for "good" metrics, accent amber (#F0AB00) for "before" metrics.
+Use solid lines for live paths and dashed lines for setup / future routing.
+
+READ TOP TO BOTTOM — consumers at top, platform foundation at bottom.
 
 ═══════════════════════════════════════════════════════════════════
-TOP BANNER (20% of height)
+TOP BANNER (15% of height)
 ═══════════════════════════════════════════════════════════════════
 
 Large bold title:
   "Governed Multi-Tenant LLM Serving on OpenShift AI"
 Subtitle (smaller):
-  "Models-as-a-Service + llm-d Prefix-Cache Routing"
+  "Models-as-a-Service governance + llm-d prefix-cache optimization"
 Red Hat + OpenShift AI logos on the right edge.
 
 ═══════════════════════════════════════════════════════════════════
-SECTION A — "The Problem" (15% of height, amber/warm background strip)
+SECTION A — "Who Uses It" (12% of height, white background)
 ═══════════════════════════════════════════════════════════════════
 
-Illustration: a GPU chip icon with a dollar sign, surrounded by multiple
-team icons (dev, ops, data science) all pointing at it.
+Three consumer icons in a row at the TOP, each with a downward arrow
+converging to a single red "MaaS Gateway" box:
+
+1. Dev Spaces + Continue (blue) — "dev key | 50k tok/h | engineering-tools"
+2. Open WebUI (orange) — "ops key | 100k tok/h | customer-support"
+3. Prefix Cache Lab (green) — "booth TTFT comparison | shared ops key"
+
+Convergence label on the merged arrow:
+  "HTTPS POST /v1/chat/completions + Bearer token
+   → maas.<domain>/models-as-a-service/llama-3-1-8b-fp8/v1"
+
+═══════════════════════════════════════════════════════════════════
+SECTION B — "The Problem" (12% of height, amber/warm background strip)
+═══════════════════════════════════════════════════════════════════
+
+Illustration: a GPU chip with a dollar sign, surrounded by dev / ops / data
+science team icons all pointing at the same chip.
 
 Three short bullet callouts with icons:
   🔑  "Multiple teams need the same LLM — who gets access?"
-  💰  "GPUs are expensive — how do you share without waste?"
-  ⏱️  "Round-robin LB recomputes prompts — P95 latency explodes"
+  💰  "GPUs are expensive — how do you share without duplicating models?"
+  ⏱️  "Naive round-robin LB recomputes prefixes — P95 tail latency explodes"
 
 ═══════════════════════════════════════════════════════════════════
-SECTION B — "The Solution" (30% of height, white background)
+SECTION C — "How It Works" (25% of height, white background)
 ═══════════════════════════════════════════════════════════════════
 
-Three columns, each with a large icon on top, a bold label, and 2-3 lines
-of text beneath:
+Vertical flow diagram (center of infographic) with labeled steps:
 
-Column 1 — Key icon (#EE0000):
-  "Models-as-a-Service"
-  "Independent API keys, rate limits, and cost centers per team.
-   Same model weights — zero GPU duplication."
+  DOWN from MaaS Gateway (solid arrows):
+    "Authorino — validate API key + subscription"
+      ↓
+    "Kuadrant — enforce rate limit per team"
+      ↓
+    "HTTPRoute → Kubernetes Service (booth v1)"
+      ↓
+    "4× vLLM replicas on NVIDIA L4 (--enable-prefix-caching)"
+      ↓
+    "Completion returned + token usage metered"
 
-Column 2 — Speedometer icon (#3E8635):
-  "llm-d Prefix-Cache Routing"
-  "Endpoint Picker steers traffic to the replica that already has the
-   KV-cache prefix → up to 98% P95 TTFT reduction."
+  Beside the flow, a DASHED side branch (clearly separate):
+    "EPP prefix-cache-scorer (future llm-d routing)"
+    Label: "leave-behind story — not on live MaaS path in booth v1"
 
-Column 3 — Shield/catalog icon (#333333):
-  "Model Catalog & Registry"
-  "Red Hat validated ModelCar. Version-controlled. Audit-ready.
-   Llama 3.1 8B Instruct FP8 on 4× NVIDIA L4."
+Three small callout boxes flanking the flow:
+
+  Left — Key icon (#EE0000):
+    "Models-as-a-Service"
+    "Separate keys, quotas, cost centers.
+     One model pool — zero GPU duplication."
+
+  Center — Speedometer icon (#3E8635):
+    "Prefix Caching (live)"
+    "Shared system prompts hit KV cache on the
+     selected replica → faster TTFT in Prefix Cache Lab."
+
+  Right — Route icon (#333333):
+    "llm-d EPP Routing (conceptual)"
+    "Prefix-aware replica stickiness collapses
+     P95 at high concurrency — showroom numbers."
 
 ═══════════════════════════════════════════════════════════════════
-SECTION C — "By the Numbers" (20% of height, light gray background)
+SECTION D — "By the Numbers" (18% of height, light gray background)
 ═══════════════════════════════════════════════════════════════════
 
 Two large data-viz callout cards side by side:
 
-Card 1 (left, green border):
-  Giant number: "98%"
-  Subtitle: "P95 TTFT Reduction"
-  Small text: "24,391 ms → 478 ms at concurrency 64"
-  A tiny horizontal bar chart showing the before (long red) / after (short green)
+Card 1 (left, green border, solid border = LIVE):
+  Giant number: "23–32%"
+  Subtitle: "Live TTFT Improvement (Prefix Cache Lab)"
+  Small text: "Shared vs unique prefixes — booth demo"
+  Tiny bar chart: tall red bar (unique) vs short green bar (shared)
 
-Card 2 (right, green border):
-  Giant number: "2 Teams, 1 Pool"
-  Subtitle: "Governed & Metered"
-  Icon row: Dev Spaces icon "50k tok/h" | Open WebUI icon "100k tok/h"
-  Small text: "Separate keys, quotas, cost centers — same GPUs"
+Card 2 (right, green border, DASHED border = LEAVE-BEHIND):
+  Giant number: "98%"
+  Subtitle: "P95 TTFT Reduction (llm-d EPP @ c=64)"
+  Small text: "24,391 ms → 478 ms — showroom leave-behind"
+  Tiny bar chart: very tall red vs tiny green
+
+Caption between cards: "Live = prefix caching | Dashed = EPP routing story"
 
 ═══════════════════════════════════════════════════════════════════
-SECTION D — "See It Live" (10% of height, red background strip)
+SECTION E — "See It Live" (8% of height, red background strip)
 ═══════════════════════════════════════════════════════════════════
 
 White text on red:
-  "Visit our booth → Prefix Cache Lab live comparison → Dev Spaces
-   AI-assisted Ansible → Open WebUI ops chatbot"
-Small icons: browser window, code editor, chat bubble
+  "Booth walkthrough → Prefix Cache Lab → Dev Spaces Ansible assist
+   → Open WebUI ops chatbot → same GPUs, governed access"
+Small icons: bar chart, code editor, chat bubble
 
 ═══════════════════════════════════════════════════════════════════
-FOOTER (5% of height)
+BOTTOM FOOTER — "Platform Foundation" (10% of height, dark gray bar)
 ═══════════════════════════════════════════════════════════════════
 
-Thin dark gray bar:
-  Left: "Red Hat OpenShift AI 3.4 | OpenShift 4.22 | 4× NVIDIA L4"
-  Right: Red Hat logo
+Row of small platform icons at the BOTTOM (foundation layer):
+  OpenShift 4.22 | OpenShift AI 3.4 | KServe / llm-d |
+  GPU Operator | Model Catalog & Registry | Perses monitoring
+
+Center text: "4× NVIDIA L4 on AWS g6.2xlarge | Llama 3.1 8B Instruct FP8"
+Right: Red Hat logo
 
 OVERALL QUALITY:
-  Print-ready at A2 poster size. Sharp vector-style edges. Text must be
-  legible at arm's length. No photographic backgrounds — purely illustrated
-  flat design with the Red Hat geometric aesthetic.
+  Print-ready at A2 poster size. Sharp vector-style edges. Text legible at
+  arm's length. Consumers and user journey at TOP; platform foundation at
+  BOTTOM. Do NOT imply EPP is on the live solid request path — distinguish
+  live prefix caching from dashed EPP leave-behind. No photographic backgrounds.

@@ -5,76 +5,148 @@ the end-to-end use case of this conference booth demo:
 
 Use the Red Hat color palette: Red (#EE0000) accents, dark gray (#333333)
 text, light warm gray (#F5F5F5) background panels. Flat modern style, no 3D.
+Label every arrow with protocol, direction, and purpose. Use solid arrows for
+live runtime paths and dashed arrows for admin/provisioning or conceptual
+future paths.
+
+OVERALL LAYOUT — three horizontal bands (top to bottom) plus a narrow
+left sidebar and right sidebar inside one rounded outer frame labeled
+"Conference Booth Use Case — llm-d + MaaS on OpenShift AI 3.4":
 
 ═══════════════════════════════════════════════════════════════════
-SECTION 1 — LEFT: "Model Lifecycle" (vertical flow, top to bottom)
+LEFT SIDEBAR — "Model Lifecycle" (vertical, dashed admin path only)
 ═══════════════════════════════════════════════════════════════════
 
-Box 1: "Red Hat AI Model Catalog"
-  Small label: "Validated Llama 3.1 8B Instruct FP8 ModelCar"
-  ↓ arrow labeled "register"
-Box 2: "Model Registry v1.5"
-  Small label: "Version control + OCI URI"
-  ↓ arrow labeled "deploy"
-Box 3: "LLMInferenceService (llm-d)"
-  Small label: "4 replicas × NVIDIA L4 — prefix caching ON"
-  ↓ arrow labeled "expose"
-Box 4: "MaaS Gateway + Kuadrant / Authorino"
-  Small label: "API keys, rate limits, cost-center metering"
+Draw as a DASHED vertical chain (not on the runtime request path):
+
+  Box 1: "Red Hat AI Model Catalog"
+    Label: "Validated Llama 3.1 8B Instruct FP8 ModelCar"
+    ↓ dashed arrow: "register version + OCI URI"
+  Box 2: "Model Registry v1.5"
+    ↓ dashed arrow: "deploy LLMInferenceService (4 replicas)"
+  Box 3: "LLMInferenceService llama-3-1-8b-fp8"
+    Label: "KServe / llm-d — prefix caching ON"
+    ↓ dashed arrow: "expose via MaaSModelRef"
+  Box 4: "MaaS subscriptions + API keys"
+    Label: "devspaces-subscription + chatbot-subscription"
+
+Caption at bottom of sidebar: "Operator-driven setup (one-time, not per request)"
 
 ═══════════════════════════════════════════════════════════════════
-SECTION 2 — CENTER: "Runtime Request Flow" (horizontal swim-lane)
+TOP BAND — "Consumers" (user-facing applications)
 ═══════════════════════════════════════════════════════════════════
 
-Show two parallel request paths (color-coded):
+Three consumer boxes side by side at the TOP of the main canvas:
 
-PATH A (blue):
-  "Developer in Dev Spaces" (person-at-laptop icon)
-  → "Continue AI extension sends prompt"
-  → "Bearer devspaces-key"
-  → "MaaS Gateway validates quota (50k tok/h)"
-  → "EPP: prefix-cache-scorer picks warm replica"
-  → "vLLM replica #2 (KV cache HIT — shared prefix)"
-  → "Completion returned"
-  Badge: "engineering-tools cost center"
+1. PATH A — "Developer in Dev Spaces + Continue AI" (blue accent)
+   Icon: person at laptop
+   Badge: devspaces-subscription | 50k tokens/h | engineering-tools
+   Outbound labels:
+     • "HTTPS POST /v1/chat/completions"
+     • "Bearer <devspaces-api-key>"
+     • "model: llama-3-1-8b-instruct-fp8"
 
-PATH B (orange):
-  "Ops engineer in Open WebUI" (chat-bubble icon)
-  → "Chat sends prompt"
-  → "Bearer chatbot-key"
-  → "MaaS Gateway validates quota (100k tok/h)"
-  → "EPP routes to best replica"
-  → "vLLM replica #4"
-  → "Completion returned"
-  Badge: "customer-support cost center"
+2. PATH B — "Ops engineer in Open WebUI" (orange accent)
+   Icon: chat bubble
+   Badge: chatbot-subscription | 100k tokens/h | customer-support
+   Same outbound labels but "Bearer <chatbot-api-key>"
 
-Between the two paths show a shared GPU pool: four boxes labeled
-"vLLM 0 / L4", "vLLM 1 / L4", "vLLM 2 / L4", "vLLM 3 / L4" with
-a glow/highlight on the replica that gets a cache HIT for PATH A.
+3. PATH C — "Booth presenter in Prefix Cache Lab" (green accent)
+   Icon: bar chart in browser
+   Badge: reuses chatbot API key | unique vs shared TTFT microbench
+   Same MaaS endpoint as PATH B
+
+All three paths merge downward into ONE labeled URL:
+  https://maas.<cluster-domain>/models-as-a-service/llama-3-1-8b-fp8/v1
 
 ═══════════════════════════════════════════════════════════════════
-SECTION 3 — RIGHT: "Booth Beat — Prefix Cache Lab"
+MIDDLE BAND — "MaaS Gateway + LLM Serving" (live runtime path)
 ═══════════════════════════════════════════════════════════════════
 
-Show a simplified browser screenshot mockup of the Prefix Cache Lab UI:
-  • Two bar charts side by side: "Unique Prefixes" (tall red bars) vs
-    "Shared Prefixes" (short green bars)
-  • A big callout: "TTFT p95 improved 23–32%"
-  Below it a second chart: "EPP vs naive LB @ concurrency 64"
-  • Two bars: "Naive 24,391 ms" (very tall red) vs "llm-d 478 ms" (tiny green)
-  • Callout: "98% reduction"
+Show a left-to-right SOLID chain for the live booth v1 request path:
+
+  Step 1: "maas-default-gateway" (Gateway API)
+    ↓ "HTTPRoute from LLMInferenceService router"
+  Step 2: "Authorino"
+    ↓ "validate API key → MaaSSubscription + MaaSAuthPolicy"
+  Step 3: "Kuadrant"
+    ↓ "enforce token rate limit (50k or 100k / hour)"
+  Step 4: "Kubernetes Service (llama-3-1-8b-fp8-kserve)"
+    ↓ "round-robin Service LB (booth v1 live path)"
+  Step 5: Shared GPU pool — four boxes in a row:
+    "vLLM replica 1 / L4" | "vLLM replica 2 / L4" |
+    "vLLM replica 3 / L4" | "vLLM replica 4 / L4"
+    Badge on each: "--enable-prefix-caching"
+
+PATH A detail — highlight replica 2 with a green glow:
+  Label: "shared system prompt → KV cache HIT on warm replica
+         (prefix caching within replica; live path still uses Service LB)"
+
+PATH B detail — highlight replica 4 with a neutral selection:
+  Label: "ops chat prompt → any replica via round-robin"
+
+Return path — SOLID arrows back upward from selected replica:
+  "JSON completion → Service → HTTPRoute → Gateway → consumer"
+  Side note: "MaaS records token usage against subscription"
+
+CONCEPTUAL OVERLAY (DASHED, do NOT merge with solid path):
+  To the right of the GPU pool, show a dashed box group:
+    "Endpoint Picker (EPP) + KV Cache Indexer"
+    Sub-labels: prefix-cache-scorer, queue-scorer, active-request-scorer
+  Dashed arrows from EPP toward replicas labeled:
+    "future llm-d routing — prefix-aware replica stickiness
+     (leave-behind; InferencePool not on live MaaS path in RHOAI 3.4.2)"
 
 ═══════════════════════════════════════════════════════════════════
-FOOTER STRIP
+BOTTOM BAND — "Platform & Governance" (foundation)
 ═══════════════════════════════════════════════════════════════════
 
-A thin banner at the bottom:
-Left: Red Hat logo + "OpenShift AI 3.4"
-Center: "Same GPUs. Governed access. Optimized tail latency."
-Right: "4× NVIDIA L4 — Llama 3.1 8B FP8 — OpenShift 4.22"
+Foundation boxes spanning the full width (thin upward support arrows to
+middle band, NOT request-path arrows):
+
+  • "Red Hat OpenShift 4.22" — Routes, RBAC, SCCs
+  • "OpenShift AI 3.4 DataScienceCluster" — KServe, MaaS, Model Registry
+  • "NVIDIA GPU Operator + NFD" → upward to each L4 under vLLM replicas
+  • "Perses / User Workload Monitoring" — dashed scrape arrows from
+    vLLM PodMonitor (:8000) and DCGM exporter
+
+Label: "4× AWS g6.2xlarge — 1× NVIDIA L4 per replica"
+
+═══════════════════════════════════════════════════════════════════
+RIGHT SIDEBAR — "Booth Beat — Prefix Cache Lab Results"
+═══════════════════════════════════════════════════════════════════
+
+Browser mockup of the Prefix Cache Lab UI:
+
+  Chart 1 — live booth result:
+    "Unique Prefixes" (tall red TTFT bars) vs
+    "Shared Prefixes" (short green TTFT bars)
+    Callout: "~23–32% TTFT improvement (live)"
+
+  Chart 2 — canned EPP leave-behind (dashed border around chart):
+    "Naive LB vs llm-d @ concurrency 64"
+    Bars: "24,391 ms" (red) vs "478 ms" (green)
+    Callout: "98% P95 TTFT reduction (showroom numbers)"
+
+Caption: "Live chart = prefix caching effect; dashed chart = EPP routing story"
+
+═══════════════════════════════════════════════════════════════════
+LEGEND + FOOTER
+═══════════════════════════════════════════════════════════════════
+
+Mini legend (bottom-right corner):
+  Solid arrow  = live runtime request/response (booth v1)
+  Dashed arrow = admin setup or conceptual EPP routing
+  Blue path    = Dev Spaces consumer
+  Orange path  = Open WebUI consumer
+  Green path   = Prefix Cache Lab
+
+Footer strip:
+  Left: Red Hat logo + "OpenShift AI 3.4"
+  Center: "Same GPUs. Governed access. Optimized tail latency."
+  Right: "4× NVIDIA L4 — Llama 3.1 8B FP8 — OpenShift 4.22"
 
 OVERALL STYLE:
-  Enterprise conference poster quality. Arrows should be clean and labeled.
-  Group each section inside a rounded-corner panel with a subtle shadow.
-  Use icons (GPU chip, person, chat bubble, bar chart, key/lock) to
-  reinforce meaning without clutter.
+  Enterprise conference poster quality. Consumers at TOP, platform at BOTTOM.
+  Do NOT draw EPP on the same solid line as Authorino → Service → vLLM.
+  Arrows must be clean, labeled, and readable at slide scale.
