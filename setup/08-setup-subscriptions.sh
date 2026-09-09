@@ -12,14 +12,28 @@ echo "Phase 8: Setup Subscriptions"
 echo "========================================="
 
 CURRENT_USER=$(oc whoami)
+KEY_OWNER="${DEMO_ADMIN_USER:-}"
+if [[ -z "${KEY_OWNER}" || "${KEY_OWNER}" == system:* ]]; then
+  if [[ "${CURRENT_USER}" != system:* ]]; then
+    KEY_OWNER="${CURRENT_USER}"
+  else
+    KEY_OWNER="admin"
+  fi
+fi
 
 echo "1. Creating OpenShift groups..."
-oc adm groups new devspaces-users --dry-run=client -o yaml | oc apply -f -
-oc adm groups new chatbot-users --dry-run=client -o yaml | oc apply -f -
+# Do not `oc apply` an empty Group: last-applied users:null wipes members.
+for g in devspaces-users chatbot-users; do
+  oc get group "${g}" &>/dev/null || oc adm groups new "${g}"
+done
 
-echo "2. Adding current user (${CURRENT_USER}) to both groups..."
-oc adm groups add-users devspaces-users "${CURRENT_USER}" 2>/dev/null || true
-oc adm groups add-users chatbot-users "${CURRENT_USER}" 2>/dev/null || true
+echo "2. Adding users to both groups (key owner: ${KEY_OWNER})..."
+for g in devspaces-users chatbot-users; do
+  oc adm groups add-users "${g}" "${KEY_OWNER}" 2>/dev/null || true
+  if [[ "${CURRENT_USER}" != "${KEY_OWNER}" && "${CURRENT_USER}" != system:* ]]; then
+    oc adm groups add-users "${g}" "${CURRENT_USER}" 2>/dev/null || true
+  fi
+done
 
 echo "3. Ensuring models-as-a-service namespace (RHOAI project labels)..."
 # Must apply the labeled Namespace manifest — a bare `oc create namespace | oc apply`
@@ -37,32 +51,94 @@ oc annotate namespace models-as-a-service \
   openshift.io/description="llm-d + MaaS governed model pool (booth demo)" \
   --overwrite
 
-echo "4. Applying MaaS Subscriptions..."
+echo "4. Ensuring MaaS Gateway AuthPolicy is enforced..."
+# RHOAI 3.5: odh-model-controller AuthPolicy {gateway}-authn overrides
+# maas-gateway-auth unless the Gateway is marked unmanaged.
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/
+oc annotate gateway maas-default-gateway -n openshift-ingress \
+  opendatahub.io/managed=false --overwrite
+oc annotate llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service \
+  security.opendatahub.io/enable-auth=false --overwrite 2>/dev/null || true
+oc delete authpolicy maas-default-gateway-authn -n openshift-ingress --ignore-not-found
+AUTH_WAIT=90
+AUTH_ELAPSED=0
+while true; do
+  ENFORCED=$(oc get authpolicy maas-gateway-auth -n openshift-ingress \
+    -o jsonpath='{.status.conditions[?(@.type=="Enforced")].status}' 2>/dev/null || echo "False")
+  if [[ "${ENFORCED}" == "True" ]]; then
+    echo "   maas-gateway-auth is Enforced."
+    break
+  fi
+  if [[ "${AUTH_ELAPSED}" -ge "${AUTH_WAIT}" ]]; then
+    echo "   WARNING: maas-gateway-auth not Enforced after ${AUTH_WAIT}s (status=${ENFORCED})."
+    oc get authpolicy -n openshift-ingress
+    break
+  fi
+  echo "   Waiting for maas-gateway-auth Enforced=True (${AUTH_ELAPSED}s / ${AUTH_WAIT}s)"
+  sleep 5
+  AUTH_ELAPSED=$((AUTH_ELAPSED + 5))
+done
+
+echo "5. Applying MaaS Subscriptions..."
 oc apply -f "${MANIFESTS_DIR}/subscriptions/devspaces-subscription.yaml"
 oc apply -f "${MANIFESTS_DIR}/subscriptions/chatbot-subscription.yaml"
 
-echo "5. Applying MaaS Auth Policies..."
+echo "6. Applying MaaS Auth Policies..."
 oc apply -f "${MANIFESTS_DIR}/subscriptions/devspaces-auth-policy.yaml"
 oc apply -f "${MANIFESTS_DIR}/subscriptions/chatbot-auth-policy.yaml"
 
-echo "6. Generating API keys for each subscription..."
-TOKEN=$(oc whoami -t)
+echo "   Waiting for MaaSAuthPolicies to leave Pending..."
+POL_WAIT=120
+POL_ELAPSED=0
+while true; do
+  PENDING=$(oc get maasauthpolicy -n models-as-a-service \
+    -o jsonpath='{range .items[*]}{.status.phase}{"\n"}{end}' 2>/dev/null | grep -c Pending || true)
+  if [[ "${PENDING}" -eq 0 ]]; then
+    echo "   MaaSAuthPolicies are no longer Pending."
+    break
+  fi
+  if [[ "${POL_ELAPSED}" -ge "${POL_WAIT}" ]]; then
+    echo "   WARNING: MaaSAuthPolicy still Pending after ${POL_WAIT}s."
+    oc get maasauthpolicy -n models-as-a-service
+    break
+  fi
+  echo "   Pending policies: ${PENDING} (${POL_ELAPSED}s / ${POL_WAIT}s)"
+  sleep 5
+  POL_ELAPSED=$((POL_ELAPSED + 5))
+done
 
-echo "   Creating Dev Spaces API key..."
-DEVSPACES_KEY=$(curl -sk -X POST "${MAAS_URL}/maas-api/v1/api-keys" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "devspaces-key", "subscription": "devspaces-subscription"}' | \
-  python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))" 2>/dev/null || echo "")
+echo "7. Generating API keys for each subscription..."
+# In-cluster bootstrapper uses a ServiceAccount token. Authorino would mint
+# keys as that SA (not in chatbot-users / devspaces-users). Call maas-api
+# directly with DEMO_ADMIN_USER identity. Group header must be JSON or
+# Authorino bracket form, not a bare name.
+mint_maas_key() {
+  local name="$1"
+  local subscription="$2"
+  local groups_json="$3"
+  oc exec -n redhat-ai-gateway-infra deploy/maas-api -- \
+    curl -sk -S -m 30 -X POST "https://127.0.0.1:8443/v1/api-keys" \
+      -H "Content-Type: application/json" \
+      -H "X-MaaS-Username: ${KEY_OWNER}" \
+      -H "X-MaaS-Group: ${groups_json}" \
+      -d "{\"name\":\"${name}\",\"subscription\":\"${subscription}\",\"expiresIn\":\"90d\"}"
+}
 
-echo "   Creating Chatbot API key..."
-CHATBOT_KEY=$(curl -sk -X POST "${MAAS_URL}/maas-api/v1/api-keys" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "chatbot-key", "subscription": "chatbot-subscription"}' | \
-  python3 -c "import sys,json; print(json.load(sys.stdin).get('key',''))" 2>/dev/null || echo "")
+echo "   Creating Dev Spaces API key (owner=${KEY_OWNER})..."
+DEVSPACES_RESP=$(mint_maas_key "devspaces-key" "devspaces-subscription" '["devspaces-users"]')
+DEVSPACES_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${DEVSPACES_RESP}" 2>/dev/null || echo "")
+if [[ -z "${DEVSPACES_KEY}" ]]; then
+  echo "   Dev Spaces key response: ${DEVSPACES_RESP}"
+fi
 
-echo "7. Storing API keys in secrets..."
+echo "   Creating Chatbot API key (owner=${KEY_OWNER})..."
+CHATBOT_RESP=$(mint_maas_key "chatbot-key" "chatbot-subscription" '["chatbot-users"]')
+CHATBOT_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${CHATBOT_RESP}" 2>/dev/null || echo "")
+if [[ -z "${CHATBOT_KEY}" ]]; then
+  echo "   Chatbot key response: ${CHATBOT_RESP}"
+fi
+
+echo "8. Storing API keys in secrets..."
 oc create namespace openshift-devspaces --dry-run=client -o yaml | oc apply -f -
 oc create namespace open-webui --dry-run=client -o yaml | oc apply -f -
 
@@ -73,7 +149,8 @@ if [[ -n "$DEVSPACES_KEY" ]]; then
     --dry-run=client -o yaml | oc apply -f -
   echo "   Dev Spaces API key stored."
 else
-  echo "   WARNING: Could not generate Dev Spaces API key."
+  echo "   ERROR: Could not generate Dev Spaces API key."
+  exit 1
 fi
 
 if [[ -n "$CHATBOT_KEY" ]]; then
@@ -83,26 +160,34 @@ if [[ -n "$CHATBOT_KEY" ]]; then
     --dry-run=client -o yaml | oc apply -f -
   echo "   Chatbot API key stored."
 else
-  echo "   WARNING: Could not generate Chatbot API key."
+  echo "   ERROR: Could not generate Chatbot API key."
+  exit 1
 fi
 
-echo "8. Enabling MaaS telemetry for Usage Dashboard..."
-oc patch tenants.maas.opendatahub.io default-tenant -n models-as-a-service \
-  --type merge \
-  -p '{
-    "spec": {
-      "telemetry": {
-        "enabled": true,
-        "metrics": {
-          "captureOrganization": false,
-          "captureUser": true,
-          "captureGroup": false,
-          "captureModelUsage": true
-        }
+echo "9. Enabling MaaS telemetry for Usage Dashboard..."
+TELEMETRY_PATCH='{
+  "spec": {
+    "telemetry": {
+      "enabled": true,
+      "metrics": {
+        "captureOrganization": false,
+        "captureUser": true,
+        "captureGroup": false,
+        "captureModelUsage": true
       }
     }
-  }'
-echo "   Tenant telemetry enabled (creates TelemetryPolicy for metric labels)."
+  }
+}'
+# RHOAI 3.5 uses MaasTenantConfig; older docs refer to Tenant.
+if oc get maastenantconfig default-tenant -n models-as-a-service &>/dev/null; then
+  oc patch maastenantconfig default-tenant -n models-as-a-service --type merge -p "${TELEMETRY_PATCH}"
+  echo "   MaasTenantConfig/default-tenant telemetry enabled."
+elif oc get tenants.maas.opendatahub.io default-tenant -n models-as-a-service &>/dev/null; then
+  oc patch tenants.maas.opendatahub.io default-tenant -n models-as-a-service --type merge -p "${TELEMETRY_PATCH}"
+  echo "   Tenant/default-tenant telemetry enabled."
+else
+  echo "   WARNING: No default-tenant (MaasTenantConfig or Tenant) found; skipping telemetry patch."
+fi
 
 echo "   Waiting for TelemetryPolicy to be created..."
 TIMEOUT=60

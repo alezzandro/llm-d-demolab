@@ -69,16 +69,28 @@ while true; do
 done
 
 echo "7. Registering Llama 3.1 8B Instruct FP8 model..."
-MR_SVC="http://default-registry.rhoai-model-registries.svc.cluster.local:8080/api/model_registry/v1alpha3"
+# Call the REST API via 127.0.0.1 inside the registry pod. Curling the
+# ClusterIP Service from that same pod times out (CNI hairpin).
+mr_curl() {
+  oc exec deployment/default-registry -n rhoai-model-registries -c rest-container -- \
+    curl -sS -m 20 "$@"
+}
 
-MODEL_EXISTS=$(oc exec deployment/default-registry -n rhoai-model-registries -- \
-  curl -s "${MR_SVC}/registered_models?name=llama-3-1-8b-instruct-fp8-dynamic" 2>/dev/null | \
-  python3 -c "import sys,json; print(json.load(sys.stdin).get('size',0))" 2>/dev/null || echo "0")
+MR_LOCAL="http://127.0.0.1:8080/api/model_registry/v1alpha3"
+MODEL_JSON=$(mr_curl "${MR_LOCAL}/registered_models")
+MODEL_EXISTS=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('size',0))" "${MODEL_JSON}" 2>/dev/null || echo "0")
+MODEL_ID=$(python3 -c "
+import json,sys
+d=json.loads(sys.argv[1])
+items=d.get('items') or []
+for m in items:
+  if m.get('name')=='llama-3-1-8b-instruct-fp8-dynamic':
+    print(m.get('id','')); break
+" "${MODEL_JSON}" 2>/dev/null || echo "")
 
-if [[ "$MODEL_EXISTS" == "0" ]]; then
+if [[ -z "$MODEL_ID" || "$MODEL_EXISTS" == "0" ]]; then
   echo "   Creating registered model..."
-  MODEL_ID=$(oc exec deployment/default-registry -n rhoai-model-registries -- \
-    curl -s -X POST "${MR_SVC}/registered_models" \
+  CREATE_JSON=$(mr_curl -X POST "${MR_LOCAL}/registered_models" \
     -H "Content-Type: application/json" \
     -d '{
       "name": "llama-3-1-8b-instruct-fp8-dynamic",
@@ -90,11 +102,30 @@ if [[ "$MODEL_EXISTS" == "0" ]]; then
         "quantization": {"metadataType": "MetadataStringValue", "string_value": "FP8-dynamic"},
         "parameters": {"metadataType": "MetadataStringValue", "string_value": "8B"}
       }
-    }' 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+    }')
+  MODEL_ID=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('id',''))" "${CREATE_JSON}")
+  if [[ -z "$MODEL_ID" ]]; then
+    echo "   ERROR: registered model create failed: ${CREATE_JSON}"
+    exit 1
+  fi
+  echo "   Registered model id=${MODEL_ID}"
+else
+  echo "   Model already registered (id=${MODEL_ID})."
+fi
 
+VER_JSON=$(mr_curl "${MR_LOCAL}/model_versions")
+VERSION_ID=$(python3 -c "
+import json,sys
+d=json.loads(sys.argv[1])
+mid=sys.argv[2]
+for v in d.get('items') or []:
+  if v.get('name')=='v1.5' and str(v.get('registeredModelId'))==str(mid):
+    print(v.get('id','')); break
+" "${VER_JSON}" "${MODEL_ID}" 2>/dev/null || echo "")
+
+if [[ -z "$VERSION_ID" ]]; then
   echo "   Creating model version v1.5..."
-  VERSION_ID=$(oc exec deployment/default-registry -n rhoai-model-registries -- \
-    curl -s -X POST "${MR_SVC}/model_versions" \
+  VCREATE=$(mr_curl -X POST "${MR_LOCAL}/model_versions" \
     -H "Content-Type: application/json" \
     -d "{
       \"name\": \"v1.5\",
@@ -105,11 +136,22 @@ if [[ "$MODEL_EXISTS" == "0" ]]; then
         \"gpu_required\": {\"metadataType\": \"MetadataStringValue\", \"string_value\": \"4x NVIDIA L4 (24GB VRAM)\"},
         \"serving_framework\": {\"metadataType\": \"MetadataStringValue\", \"string_value\": \"Red Hat AI Inference Server + llm-d\"}
       }
-    }" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null)
+    }")
+  VERSION_ID=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('id',''))" "${VCREATE}")
+  if [[ -z "$VERSION_ID" ]]; then
+    echo "   ERROR: model version create failed: ${VCREATE}"
+    exit 1
+  fi
+  echo "   Version id=${VERSION_ID}"
+else
+  echo "   Model version v1.5 already present (id=${VERSION_ID})."
+fi
 
+ART_JSON=$(mr_curl "${MR_LOCAL}/model_versions/${VERSION_ID}/artifacts" 2>/dev/null || echo '{"size":0}')
+ART_SIZE=$(python3 -c "import json,sys; print(json.loads(sys.argv[1]).get('size',0))" "${ART_JSON}" 2>/dev/null || echo "0")
+if [[ "$ART_SIZE" == "0" ]]; then
   echo "   Creating model artifact (OCI image reference)..."
-  oc exec deployment/default-registry -n rhoai-model-registries -- \
-    curl -s -X POST "${MR_SVC}/model_versions/${VERSION_ID}/artifacts" \
+  mr_curl -X POST "${MR_LOCAL}/model_versions/${VERSION_ID}/artifacts" \
     -H "Content-Type: application/json" \
     -d '{
       "name": "llama-3-1-8b-instruct-fp8-dynamic-oci",
@@ -122,12 +164,10 @@ if [[ "$MODEL_EXISTS" == "0" ]]; then
         "format": {"metadataType": "MetadataStringValue", "string_value": "OCI Modelcar"},
         "registry": {"metadataType": "MetadataStringValue", "string_value": "registry.redhat.io"}
       }
-    }' >/dev/null 2>&1
-
-  echo "   Model registered successfully!"
-else
-  echo "   Model already registered in Model Registry."
+    }' >/dev/null
 fi
+
+echo "   Model registered successfully!"
 
 echo ""
 echo "   Flow: Catalog -> Register -> Deploy llm-d (4 replicas) -> MaaS subscriptions"

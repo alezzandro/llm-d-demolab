@@ -35,7 +35,10 @@ while true; do
   ELAPSED=$((ELAPSED + INTERVAL))
 done
 
-echo "4. Enabling RHOAI 3.4 dashboard features..."
+echo "4. Enabling RHOAI dashboard features..."
+# Do not set spec.dashboardConfig.maasAuthPolicies — the CRD CEL rule
+# rejects adding that deprecated key if it was not already present:
+#   DEPRECATED: spec.dashboardConfig.maasAuthPolicies must be removed or left unchanged.
 oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
   --type merge -p '{
     "spec": {
@@ -43,7 +46,6 @@ oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
         "disableModelCatalog": false,
         "modelAsService": true,
         "genAiStudio": false,
-        "maasAuthPolicies": true,
         "observabilityDashboard": true,
         "vLLMDeploymentOnMaaS": true,
         "llmGatewayField": true,
@@ -61,7 +63,7 @@ oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
   }'
 echo "   Dashboard features enabled: Observability, MaaS, Prompt Management (Gen AI Studio/MCP off for booth v1)."
 
-echo "5. Creating HardwareProfile for L4 GPU (RHOAI 3.4 schema)..."
+echo "5. Creating HardwareProfile for L4 GPU..."
 # Replace avoids stale last-applied fields from the pre-3.4 profile shape
 # (displayName/enabled/nodeSelectors at spec root were dropped by the CRD).
 oc delete hardwareprofile gpu-l4-nvidia -n redhat-ods-applications --ignore-not-found
@@ -83,7 +85,11 @@ INTERVAL=15
 ELAPSED=0
 while true; do
   STATUS=$(oc get datasciencecluster default-dsc \
-    -o jsonpath='{.status.conditions[?(@.type=="ModelsAsServiceReady")].status}' 2>/dev/null || echo "Unknown")
+    -o jsonpath='{.status.conditions[?(@.type=="ModelsAsAServiceReady")].status}' 2>/dev/null || echo "Unknown")
+  if [[ -z "$STATUS" || "$STATUS" == "Unknown" ]]; then
+    STATUS=$(oc get datasciencecluster default-dsc \
+      -o jsonpath='{.status.conditions[?(@.type=="ModelsAsServiceReady")].status}' 2>/dev/null || echo "Unknown")
+  fi
   if [[ "$STATUS" == "True" ]]; then
     echo "   MaaS is ready!"
     break

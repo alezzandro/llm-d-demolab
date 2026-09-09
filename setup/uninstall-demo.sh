@@ -54,6 +54,12 @@ oc delete gateway maas-default-gateway -n openshift-ingress --ignore-not-found 2
 echo "10. Removing groups..."
 oc delete group devspaces-users chatbot-users --ignore-not-found 2>/dev/null || true
 
+echo "11. Removing in-cluster demo bootstrapper (keeps Web Terminal Operator)..."
+oc delete deployment demo-bootstrapper -n rh-demo-bootstrapper --ignore-not-found 2>/dev/null || true
+oc delete pvc demo-work -n rh-demo-bootstrapper --ignore-not-found 2>/dev/null || true
+oc delete clusterrolebinding rh-demo-bootstrapper-cluster-admin --ignore-not-found 2>/dev/null || true
+oc delete project rh-demo-bootstrapper --ignore-not-found 2>/dev/null || true
+
 echo ""
-echo "Demo uninstalled. Operators are still installed."
+echo "Demo uninstalled. Operators are still installed (including Web Terminal unless you remove that Subscription)."
 echo "========================================="

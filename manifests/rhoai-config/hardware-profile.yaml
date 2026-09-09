@@ -1,4 +1,4 @@
-# RHOAI 3.4 HardwareProfile schema:
+# OpenShift AI 3.5 HardwareProfile schema:
 # - display name / description / enabled live in metadata.annotations
 # - node placement lives under spec.scheduling (type: Node)
 apiVersion: infrastructure.opendatahub.io/v1

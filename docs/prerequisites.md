@@ -3,9 +3,11 @@
 ## Cluster Requirements
 
 - **OpenShift 4.22+** on AWS (IPI installation)
-- **cluster-admin** access via `oc` CLI
-- **Python 3.9+** (GPU provisioner)
-- CLI tools: `curl`, `openssl`, `git`, `base64`
+- **Red Hat OpenShift AI 3.5** via channel `stable-3.x` (see [architecture notes](architecture.md#validated-on-openshift-ai-350))
+- **cluster-admin** access via `oc` CLI (laptop) **or** apply the in-cluster bootstrapper once ([docs/bootstrapper.md](bootstrapper.md))
+- **Python 3.9+** (GPU provisioner; included in the bootstrapper image)
+- CLI tools: `curl`, `openssl`, `git`, `base64` (included in the bootstrapper image)
+- **Web Terminal Operator** (Red Hat catalog, package `web-terminal`, channel `fast` in `openshift-operators`) — required so you can troubleshoot from the console masthead without a laptop. Installed by `manifests/bootstrapper/` and by phase 1. Docs: [OpenShift Web terminal](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/web_console/web-terminal#installing-web-terminal)
 
 ## AWS Requirements
 
@@ -20,8 +22,8 @@
 | `registry.redhat.io` | ModelCar OCI images, operators, vLLM runtime |
 | `registry.access.redhat.com` | UBI, PostgreSQL, MySQL |
 | `ghcr.io` | Open WebUI + optional GuideLLM images |
-| `github.com` | GPU provisioner clone, Dev Spaces workspace git |
-| `quay.io` | Universal developer image for Dev Spaces |
+| `github.com` | GPU provisioner clone, Dev Spaces workspace git, bootstrapper `DEMO_GIT_REPO` |
+| `quay.io` | Universal developer image for Dev Spaces; `quay.io/aarrichi/rh-demo-bootstrapper` |
 
 ## Time Estimate
 
@@ -60,7 +62,9 @@ oc get machinesets -n openshift-machine-api
 | Compute workers | Platform operators | 2× m6i.xlarge (typical) |
 | GPU workers | llm-d replicas | **4× g6.2xlarge** (1× L4 each) |
 
-Additional storage: Postgres ~10Gi, MySQL ~10Gi, Open WebUI ~5Gi, Dev Spaces PVC ~10Gi/user, benchmark PVC 5Gi.
+Additional storage: Postgres ~10Gi, MySQL ~10Gi, Open WebUI ~5Gi, Dev Spaces PVC ~10Gi/user, benchmark PVC 5Gi, bootstrapper work PVC 10Gi.
+
+Laptop-free setup: apply [`manifests/bootstrapper/`](../manifests/bootstrapper/) (or Import YAML `kickoff.yaml`) so the cluster clones the git repo and runs `setup/full-setup.sh`. See [bootstrapper.md](bootstrapper.md).
 
 ## Model
 

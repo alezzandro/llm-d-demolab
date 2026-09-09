@@ -10,7 +10,7 @@ live runtime paths and dashed arrows for admin/provisioning or conceptual
 future paths.
 
 LAYOUT — three horizontal swim-lanes (top to bottom) inside a rounded
-rectangle labeled "Red Hat OpenShift 4.22 + OpenShift AI 3.4 (AWS)":
+rectangle labeled "Red Hat OpenShift 4.22 + OpenShift AI 3.5 (AWS)":
 
 ═══════════════════════════════════════════════════════════════════
 TOP LANE — "Consumers" (user-facing applications)
@@ -87,7 +87,7 @@ RIGHT ZONE — "LLMInferenceService llama-3-1-8b-fp8" (namespace: models-as-a-se
       active-request-scorer (w2)
     Dashed arrow from EPP to replicas labeled:
       "conceptual llm-d routing — prefix-aware replica selection
-       (leave-behind; InferencePool not on live MaaS path in RHOAI 3.4.2)"
+       (leave-behind; InferencePool not on live MaaS path in booth v1)"
 
   Response path — draw return arrows upward from the selected vLLM replica
   back through Service → HTTPRoute → Gateway → consumer, labeled:
@@ -101,7 +101,7 @@ Show these as foundational boxes that underpin the middle lane (draw thin
 upward support arrows, not request-path arrows):
 
   • "Red Hat OpenShift 4.22" — container platform, Routes, RBAC, SCCs
-  • "Red Hat OpenShift AI 3.4 — DataScienceCluster"
+  • "Red Hat OpenShift AI 3.5 — DataScienceCluster"
       Sub-components inside: KServe, Models-as-a-Service, Model Registry,
       OpenShift AI Dashboard
   • "Model Catalog" (Red Hat AI validated models)

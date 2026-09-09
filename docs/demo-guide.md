@@ -78,7 +78,7 @@ Show two `MaaSSubscription` objects (or dashboard equivalent):
 Talking points:
 
 - Live buttons: same MaaS endpoint; **unique** prefixes miss cache, **shared** prefixes hit `--enable-prefix-caching`  
-- Canned chart: what **prefix-cache-aware EPP routing** adds on top (sticky warm replica). Live EPP through MaaS is still blocked on RHOAI 3.4.2 — see architecture note  
+- Canned chart: what **prefix-cache-aware EPP routing** adds on top (sticky warm replica). Live EPP through MaaS is not on the booth path (empty chat body on 3.4.2 dry-run; 3.5 still uses Service LB) — see architecture note  
 - Model id for clients: **`llama-3-1-8b-instruct-fp8`**
 
 Between visitors: click **Reset results** in the Lab UI (no cluster teardown).

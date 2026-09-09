@@ -13,15 +13,22 @@ metadata:
     # Links to manifests/model/oci-connection.yaml — required for Deployments Edit wizard
     opendatahub.io/connections: llama-3-1-8b-fp8-connection
     openshift.io/display-name: llama-3-1-8b-fp8-llm-d
-    security.opendatahub.io/enable-auth: "true"
+    # MaaS owns gateway AuthPolicy (API keys). enable-auth=true makes
+    # odh-model-controller attach {gateway}-authn and override MaaS.
+    security.opendatahub.io/enable-auth: "false"
     prometheus.io/path: /metrics
     prometheus.io/port: "8000"
 spec:
-  # Accelerator template only. Do NOT add v3-4-2-kserve-config-llm-scheduler
-  # while fronting MaaS on RHOAI 3.4.2: InferencePool/EPP returns HTTP 200 with
-  # an empty body for /v1/chat/completions (validated on dry-run). Multi-replica
-  # Service load-balancing + --enable-prefix-caching still demonstrates the
-  # multi-GPU pool; booth P95 numbers come from docs/assets/baseline-comparison.md.
+  # Accelerator template only. Do NOT add the llm-scheduler preset while
+  # fronting MaaS: InferencePool/EPP returned HTTP 200 with an empty body
+  # for /v1/chat/completions (validated on RHOAI 3.4.2 dry-run; booth v1 on
+  # 3.5 still uses Service LB). Multi-replica Service LB +
+  # --enable-prefix-caching still demonstrates the GPU pool; P95 numbers:
+  # docs/assets/baseline-comparison.md.
+  #
+  # Preset name is versioned (v3-4-2-...-template-nvidia-cuda vs
+  # v3-5-0-...-single-node-template-nvidia-cuda). setup/06-deploy-llmd-model.sh
+  # substitutes whatever LLMInferenceServiceConfig exists on the cluster.
   baseRefs:
     - name: v3-4-2-kserve-config-llm-template-nvidia-cuda
   model:

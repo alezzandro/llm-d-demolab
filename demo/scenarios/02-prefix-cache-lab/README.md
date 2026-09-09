@@ -52,4 +52,4 @@ bash demo/scenarios/02-prefix-cache-lab/cleanup.sh
 
 - Every replica has `--enable-prefix-caching`
 - Shared context is cheap on the second hit; unique prefixes pay full prefill
-- Full prefix-cache-aware **routing** (EPP) numbers are the leave-behind chart (live EPP via MaaS still blocked on RHOAI 3.4.2 — see architecture notes)
+- Full prefix-cache-aware **routing** (EPP) numbers are the leave-behind chart (live EPP via MaaS is not on the booth path; see architecture notes)

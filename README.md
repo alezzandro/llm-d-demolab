@@ -1,6 +1,6 @@
 # llm-d + MaaS Booth Hybrid Demo
 
-Conference-booth demo for **Red Hat OpenShift AI 3.4**: Models-as-a-Service governance plus **llm-d** multi-replica prefix-cache-aware routing on **4× NVIDIA L4** GPUs.
+Conference-booth demo for **Red Hat OpenShift AI 3.5**: Models-as-a-Service governance plus **llm-d** multi-replica prefix-cache-aware routing on **4× NVIDIA L4** GPUs.
 
 Two independent consumers share one governed model pool:
 
@@ -11,14 +11,16 @@ Two independent consumers share one governed model pool:
 
 | Feature | Product | Description |
 |---|---|---|
-| Model Catalog / Registry | OpenShift AI 3.4 | Discover and version Red Hat AI validated models |
+| Model Catalog / Registry | OpenShift AI 3.5 | Discover and version Red Hat AI validated models |
 | llm-d serving | KServe `LLMInferenceService` | 4× vLLM replicas + prefix caching (see architecture dry-run note on EPP/MaaS) |
-| Models-as-a-Service | OpenShift AI 3.4 | Dual subscriptions, API keys, rate limits, cost centers |
+| Models-as-a-Service | OpenShift AI 3.5 | Dual subscriptions, API keys, rate limits, cost centers |
 | Dev consumer | Dev Spaces + Continue | Cloud IDE wired to MaaS |
 | Ops consumer | Open WebUI | Chat UI on a second MaaS subscription |
 | Tail-latency story | Prefix Cache Lab UI + EPP leave-behind | Live unique vs shared TTFT; canned EPP P95 chart |
 
 ## Quick Start
+
+**Laptop (interactive):**
 
 ```bash
 # From an OpenShift 4.22+ AWS cluster (cluster-admin)
@@ -31,13 +33,23 @@ bash setup/full-setup.sh
 bash setup/full-setup.sh 6
 ```
 
+**In-cluster (close the laptop after apply):** clone this repo on the cluster and run setup in a keep-alive pod. See [docs/bootstrapper.md](docs/bootstrapper.md).
+
+```bash
+oc apply -k manifests/bootstrapper/
+oc logs -f -n rh-demo-bootstrapper deploy/demo-bootstrapper
+```
+
+Or **Import YAML** [`manifests/bootstrapper/kickoff.yaml`](manifests/bootstrapper/kickoff.yaml) in the OpenShift console (replace `DEMO_GIT_REPO_PLACEHOLDER`).
+
 ## Prerequisites
 
 - OpenShift **4.22+** on AWS (IPI) with cluster-admin
 - AWS quota for **4× `g6.2xlarge`** (NVIDIA L4)
 - `oc`, Python 3.9+, `curl`, `openssl`
+- **Web Terminal Operator** (installed with the bootstrapper / phase 1) — [docs](https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/web_console/web-terminal#installing-web-terminal)
 
-See [docs/prerequisites.md](docs/prerequisites.md).
+See [docs/prerequisites.md](docs/prerequisites.md). In-cluster kickoff: [docs/bootstrapper.md](docs/bootstrapper.md).
 
 ## Setup Phases
 
@@ -78,9 +90,12 @@ P95 leave-behind: [docs/assets/baseline-comparison.md](docs/assets/baseline-comp
 - Scale GPU MachineSets to 0 overnight to control AWS cost.
 - Open WebUI image is community (`ghcr.io/open-webui/open-webui`) — demo exception vs UBI-only policy.
 - Prefix Cache Lab image is built from UBI9 (`apps/prefix-cache-lab/Containerfile`).
+- In-cluster bootstrapper image is UBI9 (`apps/demo-bootstrapper/Containerfile`, `quay.io/aarrichi/rh-demo-bootstrapper:ubi9-1`).
+- The RHOAI Subscription uses channel `stable-3.x` (currently **3.5.0**). Setup scripts discover KServe presets and MaaS CRs at runtime — see [architecture notes](docs/architecture.md#validated-on-openshift-ai-350).
 
 ## Documentation References
 
-- [OpenShift AI 3 — Deploying models](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3/html/deploying_models/index)
+- [OpenShift AI 3.5](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/)
+- [Govern LLM access with Models-as-a-Service (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/)
 - [KServe + llm-d](https://developers.redhat.com/articles/2026/04/21/kserve-llm-d-optimized-gen-ai-inference)
 - [MaaS on OpenShift](https://developers.redhat.com/articles/2026/03/24/run-model-service-multiple-llms-openshift)

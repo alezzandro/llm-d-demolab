@@ -11,7 +11,7 @@ future paths.
 
 OVERALL LAYOUT — three horizontal bands (top to bottom) plus a narrow
 left sidebar and right sidebar inside one rounded outer frame labeled
-"Conference Booth Use Case — llm-d + MaaS on OpenShift AI 3.4":
+"Conference Booth Use Case — llm-d + MaaS on OpenShift AI 3.5":
 
 ═══════════════════════════════════════════════════════════════════
 LEFT SIDEBAR — "Model Lifecycle" (vertical, dashed admin path only)
@@ -95,7 +95,7 @@ CONCEPTUAL OVERLAY (DASHED, do NOT merge with solid path):
     Sub-labels: prefix-cache-scorer, queue-scorer, active-request-scorer
   Dashed arrows from EPP toward replicas labeled:
     "future llm-d routing — prefix-aware replica stickiness
-     (leave-behind; InferencePool not on live MaaS path in RHOAI 3.4.2)"
+     (leave-behind; InferencePool not on live MaaS path in booth v1)"
 
 ═══════════════════════════════════════════════════════════════════
 BOTTOM BAND — "Platform & Governance" (foundation)
@@ -105,7 +105,7 @@ Foundation boxes spanning the full width (thin upward support arrows to
 middle band, NOT request-path arrows):
 
   • "Red Hat OpenShift 4.22" — Routes, RBAC, SCCs
-  • "OpenShift AI 3.4 DataScienceCluster" — KServe, MaaS, Model Registry
+  • "OpenShift AI 3.5 DataScienceCluster" — KServe, MaaS, Model Registry
   • "NVIDIA GPU Operator + NFD" → upward to each L4 under vLLM replicas
   • "Perses / User Workload Monitoring" — dashed scrape arrows from
     vLLM PodMonitor (:8000) and DCGM exporter
@@ -142,7 +142,7 @@ Mini legend (bottom-right corner):
   Green path   = Prefix Cache Lab
 
 Footer strip:
-  Left: Red Hat logo + "OpenShift AI 3.4"
+  Left: Red Hat logo + "OpenShift AI 3.5"
   Center: "Same GPUs. Governed access. Optimized tail latency."
   Right: "4× NVIDIA L4 — Llama 3.1 8B FP8 — OpenShift 4.22"
 

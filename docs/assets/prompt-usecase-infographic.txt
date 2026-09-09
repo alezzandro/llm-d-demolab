@@ -120,7 +120,7 @@ BOTTOM FOOTER — "Platform Foundation" (10% of height, dark gray bar)
 ═══════════════════════════════════════════════════════════════════
 
 Row of small platform icons at the BOTTOM (foundation layer):
-  OpenShift 4.22 | OpenShift AI 3.4 | KServe / llm-d |
+  OpenShift 4.22 | OpenShift AI 3.5 | KServe / llm-d |
   GPU Operator | Model Catalog & Registry | Perses monitoring
 
 Center text: "4× NVIDIA L4 on AWS g6.2xlarge | Llama 3.1 8B Instruct FP8"

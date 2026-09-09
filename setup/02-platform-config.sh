@@ -28,6 +28,9 @@ echo "3. Creating MaaS Gateway..."
 echo "   (Uses existing data-science-gateway-class and wildcard TLS cert)"
 GATEWAY_YAML="${MANIFESTS_DIR}/platform-config/gateway/gateway.yaml"
 sed "s/CLUSTER_DOMAIN_PLACEHOLDER/${CLUSTER_DOMAIN}/g" "$GATEWAY_YAML" | oc apply -f -
+# Keep MaaS AuthPolicy enforced if the Gateway already existed without this annotation.
+oc annotate gateway maas-default-gateway -n openshift-ingress \
+  opendatahub.io/managed=false --overwrite
 
 echo "4. Waiting for MaaS Gateway to reach Programmed=True..."
 TIMEOUT=120

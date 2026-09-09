@@ -31,7 +31,18 @@ echo "2. Creating OCI ModelCar connection (required for OpenShift AI Deployments
 oc apply -f "${MANIFESTS_DIR}/model/oci-connection.yaml"
 
 echo "3. Creating llm-d LLMInferenceService (${EXPECTED_REPLICAS}x vLLM + prefix-caching)..."
-oc apply -f "${MANIFESTS_DIR}/model/llm-inference-service.yaml"
+NVIDIA_PRESET=$(oc get llminferenceserviceconfig -n redhat-ods-applications \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null | \
+  grep -E 'kserve-config-llm-single-node-template-nvidia-cuda$|kserve-config-llm-template-nvidia-cuda$' | \
+  grep -v multi-node | sort | tail -1 || true)
+if [[ -z "${NVIDIA_PRESET}" ]]; then
+  echo "ERROR: No NVIDIA CUDA LLMInferenceServiceConfig preset found in redhat-ods-applications."
+  oc get llminferenceserviceconfig -n redhat-ods-applications --no-headers
+  exit 1
+fi
+echo "   Using KServe preset: ${NVIDIA_PRESET}"
+sed "s/v3-4-2-kserve-config-llm-template-nvidia-cuda/${NVIDIA_PRESET}/" \
+  "${MANIFESTS_DIR}/model/llm-inference-service.yaml" | oc apply -f -
 # Ensure connection annotation sticks even if an older CR already exists
 oc annotate llminferenceservice "${LLM_NAME}" -n models-as-a-service \
   opendatahub.io/connections=llama-3-1-8b-fp8-connection \
@@ -59,6 +70,14 @@ while true; do
     exit 1
   fi
   echo "   Ready=${IS_READY} | pods=${READY_PODS}/${TOTAL_PODS} (${ELAPSED}s / ${TIMEOUT}s)"
+  if [[ "$ELAPSED" -ge 60 ]]; then
+    PRESET_MSG=$(oc get llminferenceservice "${LLM_NAME}" -n models-as-a-service \
+      -o jsonpath='{.status.conditions[?(@.reason=="ConfigNotFound")].message}' 2>/dev/null || true)
+    if [[ -n "$PRESET_MSG" ]]; then
+      echo "ERROR: KServe preset missing: ${PRESET_MSG}"
+      exit 1
+    fi
+  fi
   sleep "$INTERVAL"
   ELAPSED=$((ELAPSED + INTERVAL))
 done

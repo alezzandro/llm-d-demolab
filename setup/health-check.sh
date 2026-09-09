@@ -202,6 +202,36 @@ else
 fi
 echo ""
 
+# ─── 11. In-cluster demo bootstrapper (optional) ────────────────────────────────
+echo "11. Demo bootstrapper (optional)"
+if oc get ns rh-demo-bootstrapper &>/dev/null; then
+  BS_READY=$(oc get deploy demo-bootstrapper -n rh-demo-bootstrapper -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+  if [[ "${BS_READY:-0}" -ge 1 ]]; then
+    check_pass "demo-bootstrapper Deployment: Ready"
+  else
+    check_fail "demo-bootstrapper Deployment: not ready"
+  fi
+  WTO=$(oc get csv -n openshift-operators --no-headers 2>/dev/null | awk '/web-terminal/ {print $NF; exit}')
+  if [[ "${WTO}" == "Succeeded" ]]; then
+    check_pass "Web Terminal Operator: Succeeded"
+  else
+    check_warn "Web Terminal Operator: ${WTO:-missing} (refresh console for masthead terminal)"
+  fi
+  BS_STATUS=$(oc exec -n rh-demo-bootstrapper deploy/demo-bootstrapper -- cat /work/status 2>/dev/null || echo "unknown")
+  if [[ "${BS_STATUS}" == "succeeded" ]]; then
+    check_pass "Bootstrapper setup status: succeeded"
+  elif [[ "${BS_STATUS}" == "running" ]]; then
+    check_warn "Bootstrapper setup status: running (see oc logs -n rh-demo-bootstrapper deploy/demo-bootstrapper)"
+  elif [[ "${BS_STATUS}" == "failed" ]]; then
+    check_fail "Bootstrapper setup status: failed (pod stays Running; attach with oc rsh)"
+  else
+    check_warn "Bootstrapper setup status: ${BS_STATUS}"
+  fi
+else
+  check_warn "Namespace rh-demo-bootstrapper not present (laptop setup, or not kicked off yet)"
+fi
+echo ""
+
 # ─── Summary ────────────────────────────────────────────────────────────────────
 echo "========================================="
 if [[ "$ERRORS" -eq 0 ]]; then
