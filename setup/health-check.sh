@@ -177,6 +177,9 @@ if [[ "$HTTP_CODE" == "200" || "$HTTP_CODE" == "403" ]]; then
   check_pass "MaaS endpoint reachable (HTTP $HTTP_CODE)"
 else
   check_fail "MaaS endpoint returned HTTP $HTTP_CODE"
+  if [[ "$HTTP_CODE" == "503" ]]; then
+    check_warn "HTTP 503 with an otherwise Ready Gateway is usually Kuadrant WASM fail-closed after a gateway/operator restart; --fix bounces MaaS gateway pods"
+  fi
 fi
 echo ""
 
@@ -223,7 +226,9 @@ if oc get ns rh-demo-bootstrapper &>/dev/null; then
   elif [[ "${BS_STATUS}" == "running" ]]; then
     check_warn "Bootstrapper setup status: running (see oc logs -n rh-demo-bootstrapper deploy/demo-bootstrapper)"
   elif [[ "${BS_STATUS}" == "failed" ]]; then
-    check_fail "Bootstrapper setup status: failed (pod stays Running; attach with oc rsh)"
+    # Optional installer only. A leftover overnight retry (DEMO_RETRY=true) must
+    # not fail a booth cluster whose serving path already completed.
+    check_warn "Bootstrapper setup status: failed (stale PVC / leftover retry; ignore if sections 1–10 passed; --fix clears DEMO_RETRY)"
   else
     check_warn "Bootstrapper setup status: ${BS_STATUS}"
   fi
@@ -365,6 +370,62 @@ spec:
   type: ExternalName
   externalName: data-science-perses.redhat-ods-monitoring.svc.cluster.local
 EOF
+  fi
+
+  # Fix 7: MaaS HTTP 503 — Envoy Kuadrant WASM fail-closed after a raced
+  # gateway / kuadrant-operator restart. vLLM can be healthy while every
+  # Gateway route returns empty 503 (access log: wasm_fail_stream).
+  if [[ "${HTTP_CODE}" == "503" ]]; then
+    echo ""
+    echo ">>> MaaS returned HTTP 503 — restarting MaaS gateway pods to reload Kuadrant WASM..."
+    oc delete pod -n openshift-ingress \
+      -l gateway.networking.k8s.io/gateway-name=maas-default-gateway \
+      --wait=false 2>/dev/null || true
+    TIMEOUT=120
+    INTERVAL=5
+    ELAPSED=0
+    while true; do
+      GW_READY=$(oc get deploy -n openshift-ingress \
+        -l gateway.networking.k8s.io/gateway-name=maas-default-gateway \
+        -o jsonpath='{.items[0].status.readyReplicas}' 2>/dev/null || echo "0")
+      GW_WANT=$(oc get deploy -n openshift-ingress \
+        -l gateway.networking.k8s.io/gateway-name=maas-default-gateway \
+        -o jsonpath='{.items[0].status.replicas}' 2>/dev/null || echo "0")
+      if [[ "${GW_READY:-0}" -ge 1 && "${GW_READY}" == "${GW_WANT}" ]]; then
+        echo "    MaaS gateway replicas Ready (${GW_READY}/${GW_WANT})"
+        break
+      fi
+      if [[ "$ELAPSED" -ge "$TIMEOUT" ]]; then
+        echo "    WARNING: MaaS gateway not Ready after ${TIMEOUT}s"
+        break
+      fi
+      echo "    Waiting for gateway pods (${GW_READY:-0}/${GW_WANT:-?} ${ELAPSED}s / ${TIMEOUT}s)"
+      sleep "$INTERVAL"
+      ELAPSED=$((ELAPSED + INTERVAL))
+    done
+    sleep 8
+    HTTP_CODE=$(timeout 10 curl -sk -o /dev/null -w "%{http_code}" \
+      "${MAAS_URL}/models-as-a-service/llama-3-1-8b-fp8/v1/models" \
+      -H "Authorization: Bearer ${TOKEN}" 2>/dev/null || echo "000")
+    echo "    Re-probe after WASM reload: HTTP ${HTTP_CODE}"
+  fi
+
+  # Fix 8: leftover bootstrapper retry after a completed install. Do not
+  # re-run setup. Clear DEMO_RETRY first so a Recreate cannot start phase N again.
+  if oc get ns rh-demo-bootstrapper &>/dev/null \
+     && [[ "${LLM_READY}" == "True" ]] \
+     && [[ "${HTTP_CODE}" == "200" || "${HTTP_CODE}" == "403" ]]; then
+    BS_STATUS_NOW=$(oc exec -n rh-demo-bootstrapper deploy/demo-bootstrapper -- cat /work/status 2>/dev/null || echo "unknown")
+    RETRY_NOW=$(oc get deploy demo-bootstrapper -n rh-demo-bootstrapper \
+      -o jsonpath='{range .spec.template.spec.containers[0].env[?(@.name=="DEMO_RETRY")]}{.value}{end}' 2>/dev/null || echo "")
+    if [[ "${BS_STATUS_NOW}" == "failed" || "${RETRY_NOW}" == "true" ]]; then
+      echo ""
+      echo ">>> Clearing leftover bootstrapper retry (setup already finished; not re-running)..."
+      oc exec -n rh-demo-bootstrapper deploy/demo-bootstrapper -- \
+        sh -c 'echo succeeded > /work/status; echo 0 > /work/exit_code' 2>/dev/null || true
+      oc set env deploy/demo-bootstrapper -n rh-demo-bootstrapper \
+        DEMO_RETRY=false DEMO_SETUP_ARGS- 2>/dev/null || true
+    fi
   fi
 
   echo ""

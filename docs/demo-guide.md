@@ -125,3 +125,5 @@ Do **not** scale the `LLMInferenceService` to 0 between visitors unless recoveri
 ## Overnight
 
 Scale GPU MachineSets to 0 (or stop instances) to control AWS cost. Next morning: scale back to 4, then `bash setup/health-check.sh --fix`.
+
+`--fix` also restarts MaaS gateway pods when `/v1/models` returns HTTP 503 (Kuadrant WASM fail-closed after a gateway/operator race) and clears a leftover bootstrapper `DEMO_RETRY` without re-running setup. The bootstrapper PVC status is advisory; a `failed` file after a completed install is not a demo outage.

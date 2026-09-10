@@ -85,6 +85,15 @@ oc set env deploy/demo-bootstrapper -n rh-demo-bootstrapper DEMO_RETRY=true
 oc delete pod -n rh-demo-bootstrapper -l app=demo-bootstrapper
 ```
 
+When setup has **already succeeded**, turn retry off. Otherwise a later pod restart (node drain, image pull, `oc set env`) re-runs the start phase and can overwrite `/work/status` with `failed` while the demo itself is fine:
+
+```bash
+oc exec -n rh-demo-bootstrapper deploy/demo-bootstrapper -- \
+  sh -c 'echo succeeded > /work/status; echo 0 > /work/exit_code'
+oc set env deploy/demo-bootstrapper -n rh-demo-bootstrapper \
+  DEMO_RETRY=false DEMO_SETUP_ARGS-
+```
+
 Do **not** scale the Deployment to 0 while setup is running.
 
 `oc logs` only shows PID 1 (the entrypoint). After a failure the container `sleep infinity`; an `oc exec` resume does **not** appear in `oc logs`. To rerun setup in the log stream, set `DEMO_RETRY=true` (and optionally `DEMO_SETUP_ARGS=<phase>`) then delete the pod.
