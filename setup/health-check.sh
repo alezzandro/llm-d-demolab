@@ -205,8 +205,74 @@ else
 fi
 echo ""
 
-# ─── 11. In-cluster demo bootstrapper (optional) ────────────────────────────────
-echo "11. Demo bootstrapper (optional)"
+# ─── 11. OpenShift AI 3.5 dashboard / control plane (warn only) ─────────────────
+echo "11. OpenShift AI 3.5 dashboard features"
+dash_flag() {
+  oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
+    -o jsonpath="{.spec.dashboardConfig.${1}}" 2>/dev/null || echo ""
+}
+GENAI=$(dash_flag genAiStudio)
+MCP=$(dash_flag mcpCatalog)
+LLMDT=$(dash_flag llmdTemplates)
+LMEVAL=$(dash_flag disableLMEval)
+if [[ "${GENAI}" == "true" && "${MCP}" == "true" && "${LLMDT}" == "true" ]]; then
+  check_pass "OdhDashboardConfig: genAiStudio, mcpCatalog, llmdTemplates enabled"
+else
+  check_warn "OdhDashboardConfig flags incomplete (genAiStudio=${GENAI:-?} mcpCatalog=${MCP:-?} llmdTemplates=${LLMDT:-?}); re-run setup/04-rhoai-config.sh"
+fi
+if [[ "${LMEVAL}" == "false" ]]; then
+  check_pass "Eval Hub visible (disableLMEval=false)"
+else
+  check_warn "disableLMEval=${LMEVAL:-?} (Eval Hub hidden unless false)"
+fi
+
+dsc_state() {
+  oc get datasciencecluster default-dsc \
+    -o jsonpath="{.spec.components.${1}.managementState}" 2>/dev/null || echo ""
+}
+OGX_STATE=$(dsc_state ogx)
+if [[ -z "${OGX_STATE}" ]]; then
+  OGX_STATE=$(dsc_state ogxoperator)
+fi
+PIPE_STATE=$(dsc_state aipipelines)
+if [[ -z "${PIPE_STATE}" ]]; then
+  PIPE_STATE=$(dsc_state datasciencepipelines)
+fi
+TRUSTY_STATE=$(dsc_state trustyai)
+MLFLOW_STATE=$(dsc_state mlflowoperator)
+RAY_STATE=$(dsc_state ray)
+TRAIN_STATE=$(dsc_state trainingoperator)
+KUEUE_STATE=$(dsc_state kueue)
+
+if [[ "${OGX_STATE}" == "Managed" ]]; then
+  check_pass "DSC OGX: Managed"
+else
+  check_warn "DSC OGX: ${OGX_STATE:-missing} (Gen AI Studio Playground needs OGX Managed)"
+fi
+if [[ "${PIPE_STATE}" == "Managed" ]]; then
+  check_pass "DSC AI Pipelines: Managed"
+else
+  check_warn "DSC AI Pipelines: ${PIPE_STATE:-missing}"
+fi
+if [[ "${TRUSTY_STATE}" == "Managed" ]]; then
+  check_pass "DSC TrustyAI: Managed"
+else
+  check_warn "DSC TrustyAI: ${TRUSTY_STATE:-missing}"
+fi
+if [[ "${MLFLOW_STATE}" == "Managed" ]]; then
+  check_pass "DSC MLflow: Managed"
+else
+  check_warn "DSC MLflow: ${MLFLOW_STATE:-missing}"
+fi
+if [[ "${RAY_STATE}" == "Removed" && "${TRAIN_STATE}" == "Removed" && "${KUEUE_STATE}" == "Removed" ]]; then
+  check_pass "DSC Ray/Kueue/TrainingOperator: Removed (llm-d keeps the 4 L4s)"
+else
+  check_warn "DSC Ray=${RAY_STATE:-?} Kueue=${KUEUE_STATE:-?} Training=${TRAIN_STATE:-?} (should stay Removed on the booth cluster)"
+fi
+echo ""
+
+# ─── 12. In-cluster demo bootstrapper (optional) ────────────────────────────────
+echo "12. Demo bootstrapper (optional)"
 if oc get ns rh-demo-bootstrapper &>/dev/null; then
   BS_READY=$(oc get deploy demo-bootstrapper -n rh-demo-bootstrapper -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
   if [[ "${BS_READY:-0}" -ge 1 ]]; then

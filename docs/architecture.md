@@ -90,9 +90,11 @@ Model Catalog (Red Hat AI)
 
 ## Out of scope (v1) / dry-run notes
 
-- Gen AI Playground / LlamaStack
 - Side-by-side live naive LB deployment (would need 8 GPUs)
 - Full 300s GuideLLM during booth hours (prep-day / canned numbers only)
+- Sample `OGXServer`, MCP servers, AutoML/training jobs (would compete with the 4× L4 llm-d pool)
+
+Phase 4 enables OpenShift AI 3.5 **dashboard flags** and **control-plane** DSC operators (OGX, AI Pipelines, TrustyAI, MLflow) so Gen AI Studio, MCP catalog, Eval Hub, and llm-d templates appear in the UI. Ray, Kueue, and TrainingOperator stay **Removed**. Playground chat still needs an `OGXServer` you deploy later; see [Activating the OGX Operator](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_ogx/activating-the-ogx-operator_rag) and [Customize the dashboard (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/managing_resources/customizing-the-dashboard).
 
 ### InferencePool / EPP (not on the live MaaS path)
 
@@ -112,7 +114,7 @@ The RHOAI Subscription uses channel **`stable-3.x`** with Automatic approval, so
 2. **MaaS vs ODH AuthPolicy** — The Gateway must be annotated `opendatahub.io/managed: "false"`, and the `LLMInferenceService` must set `security.opendatahub.io/enable-auth: "false"`. Otherwise `odh-model-controller` installs `{gateway}-authn` on the same Gateway and Kuadrant **overrides** MaaS `maas-gateway-auth` (API keys / `X-MaaS-Username`). Phase 8 deletes the competing policy if it is still present. See [Govern LLM access with Models-as-a-Service (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/).
 3. **API keys in-cluster** — `maas-api` runs in `redhat-ai-gateway-infra`. The bootstrapper ServiceAccount is not in `chatbot-users` / `devspaces-users`, so phase 8 mints keys by calling `maas-api` with `X-MaaS-Username` (`DEMO_ADMIN_USER`) and a JSON `X-MaaS-Group` header, then stores them in Secrets.
 4. **Telemetry** — Patch `MaasTenantConfig/default-tenant` in `models-as-a-service` (3.5). The older `Tenant` CR is unused on this stack.
-5. **Dashboard** — Do not add deprecated `spec.dashboardConfig.maasAuthPolicies`; the CRD CEL rule rejects adding that key when it was absent.
+5. **Dashboard** — Do not add deprecated `spec.dashboardConfig.maasAuthPolicies`; the CRD CEL rule rejects adding that key when it was absent. Phase 4 turns on 3.5 feature flags (`genAiStudio`, `mcpCatalog`, `llmdTemplates`, `disableLMEval=false`, …) plus OGX / AI Pipelines / TrustyAI / MLflow. Do not add Ray/Kueue/TrainingOperator on the booth cluster.
 6. **Model Registry** — Register models with `oc exec -c rest-container` against `http://127.0.0.1:8080`. Curling the ClusterIP from inside the same pod times out (CNI hairpin).
 7. **Verify script** — Look for `maas-api` in `redhat-ai-gateway-infra` (fallback: `redhat-ods-applications`) and DSC condition `ModelsAsAServiceReady` (fallback: `ModelsAsServiceReady`).
 8. **Bootstrapper** — `git config --global --add safe.directory /work/src` because the PVC clone is not owned by the container user. `oc logs` only follows PID 1; after a failure the entrypoint sleeps — resume with `DEMO_RETRY=true` and delete the pod (see [bootstrapper.md](bootstrapper.md)). After setup succeeds, leave `DEMO_RETRY=false` and clear `DEMO_SETUP_ARGS`. An overnight pod restart with those flags still set re-runs a phase and overwrites `/work/status` to `failed` even when serving is healthy.
@@ -123,6 +125,7 @@ OpenShift alert `TargetDown` for `openshift-ingress/istio-pod-monitor` (about 33
 ## References
 
 - [OpenShift AI 3.5](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/)
+- [Customize the dashboard (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/managing_resources/customizing-the-dashboard)
 - [Govern LLM access with Models-as-a-Service (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/)
 - [KServe + llm-d article](https://developers.redhat.com/articles/2026/04/21/kserve-llm-d-optimized-gen-ai-inference)
 - [MaaS article](https://developers.redhat.com/articles/2026/03/24/run-model-service-multiple-llms-openshift)

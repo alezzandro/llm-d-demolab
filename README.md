@@ -59,7 +59,7 @@ See [docs/prerequisites.md](docs/prerequisites.md). In-cluster kickoff: [docs/bo
 | 1 | `01-install-operators.sh` | RHOAI, GPU, Dev Spaces, Kuadrant stack, … |
 | 2 | `02-platform-config.sh` | Gateway, Kuadrant, monitoring |
 | 3 | `03-maas-platform.sh` | MaaS Postgres / TLS |
-| 4 | `04-rhoai-config.sh` | DataScienceCluster + HardwareProfile |
+| 4 | `04-rhoai-config.sh` | DataScienceCluster + HardwareProfile + OpenShift AI 3.5 dashboard flags (Gen AI Studio, MCP, llm-d templates, Eval Hub) and control-plane operators (OGX, AI Pipelines, TrustyAI, MLflow) |
 | 5 | `05-model-registry.sh` | Register Llama 3.1 8B Instruct FP8 |
 | 6 | `06-deploy-llmd-model.sh` | llm-d `LLMInferenceService` (4 replicas) + `MaaSModelRef` |
 | 7 | `07-verify-maas-llmd.sh` | End-to-end MaaS + llm-d checks |
@@ -92,6 +92,7 @@ P95 leave-behind: [docs/assets/baseline-comparison.md](docs/assets/baseline-comp
 - Prefix Cache Lab image is built from UBI9 (`apps/prefix-cache-lab/Containerfile`).
 - In-cluster bootstrapper image is UBI9 (`apps/demo-bootstrapper/Containerfile`, `quay.io/aarrichi/rh-demo-bootstrapper:ubi9-1`).
 - The RHOAI Subscription uses channel `stable-3.x` (currently **3.5.0**). Setup scripts discover KServe presets and MaaS CRs at runtime — see [architecture notes](docs/architecture.md#validated-on-openshift-ai-350).
+- Phase 4 enables OpenShift AI 3.5 dashboard features and control-plane operators. It does **not** start AutoML, training, or extra GPU playground servers (those would steal the 4× L4 llm-d pool).
 
 ## Documentation References
 

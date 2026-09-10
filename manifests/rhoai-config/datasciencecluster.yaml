@@ -10,8 +10,20 @@ spec:
       managementState: Managed
       modelsAsService:
         managementState: Managed
+    # OpenShift AI 3.5 control plane for dashboard nav (Gen AI Studio, Develop &
+    # train, Eval Hub, global prompts). Do not enable Ray/Kueue/Training — those
+    # jobs would compete with the 4× L4 llm-d pool.
+    aipipelines:
+      managementState: Managed
+    ogx:
+      managementState: Managed
+    mlflowoperator:
+      managementState: Managed
+    trustyai:
+      managementState: Managed
     kueue:
       managementState: Removed
+    # Deprecated in 3.5 — Playground uses OGX. Keep Removed.
     llamastackoperator:
       managementState: Removed
     modelregistry:
@@ -20,8 +32,6 @@ spec:
     ray:
       managementState: Removed
     trainingoperator:
-      managementState: Removed
-    trustyai:
       managementState: Removed
     workbenches:
       managementState: Managed

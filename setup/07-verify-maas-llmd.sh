@@ -113,6 +113,38 @@ else
 fi
 
 echo ""
+echo "7. OpenShift AI 3.5 dashboard / control plane..."
+GENAI=$(oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
+  -o jsonpath='{.spec.dashboardConfig.genAiStudio}' 2>/dev/null || echo "")
+MCP=$(oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
+  -o jsonpath='{.spec.dashboardConfig.mcpCatalog}' 2>/dev/null || echo "")
+LLMDT=$(oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
+  -o jsonpath='{.spec.dashboardConfig.llmdTemplates}' 2>/dev/null || echo "")
+check "genAiStudio enabled" "$([ "${GENAI}" == "true" ] && echo true || echo false)"
+check "mcpCatalog enabled" "$([ "${MCP}" == "true" ] && echo true || echo false)"
+check "llmdTemplates enabled" "$([ "${LLMDT}" == "true" ] && echo true || echo false)"
+
+OGX=$(oc get datasciencecluster default-dsc \
+  -o jsonpath='{.spec.components.ogx.managementState}' 2>/dev/null || echo "")
+if [[ -z "${OGX}" ]]; then
+  OGX=$(oc get datasciencecluster default-dsc \
+    -o jsonpath='{.spec.components.ogxoperator.managementState}' 2>/dev/null || echo "")
+fi
+PIPE=$(oc get datasciencecluster default-dsc \
+  -o jsonpath='{.spec.components.aipipelines.managementState}' 2>/dev/null || echo "")
+TRUSTY=$(oc get datasciencecluster default-dsc \
+  -o jsonpath='{.spec.components.trustyai.managementState}' 2>/dev/null || echo "")
+MLFLOW=$(oc get datasciencecluster default-dsc \
+  -o jsonpath='{.spec.components.mlflowoperator.managementState}' 2>/dev/null || echo "")
+RAY=$(oc get datasciencecluster default-dsc \
+  -o jsonpath='{.spec.components.ray.managementState}' 2>/dev/null || echo "")
+check "DSC OGX Managed" "$([ "${OGX}" == "Managed" ] && echo true || echo false)"
+check "DSC AI Pipelines Managed" "$([ "${PIPE}" == "Managed" ] && echo true || echo false)"
+check "DSC TrustyAI Managed" "$([ "${TRUSTY}" == "Managed" ] && echo true || echo false)"
+check "DSC MLflow Managed" "$([ "${MLFLOW}" == "Managed" ] && echo true || echo false)"
+check "DSC Ray still Removed" "$([ "${RAY}" == "Removed" ] && echo true || echo false)"
+
+echo ""
 echo "========================================="
 echo "MaaS + llm-d Verification Summary"
 echo "========================================="

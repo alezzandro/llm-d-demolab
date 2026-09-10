@@ -112,6 +112,10 @@ echo "7. Generating API keys for each subscription..."
 # keys as that SA (not in chatbot-users / devspaces-users). Call maas-api
 # directly with DEMO_ADMIN_USER identity. Group header must be JSON or
 # Authorino bracket form, not a bare name.
+#
+# Re-running this phase always POSTed a new key with the same display name,
+# which left duplicate chatbot-key / devspaces-key rows in MaaS. Reuse a
+# stored secret when it still authenticates.
 mint_maas_key() {
   local name="$1"
   local subscription="$2"
@@ -124,18 +128,42 @@ mint_maas_key() {
       -d "{\"name\":\"${name}\",\"subscription\":\"${subscription}\",\"expiresIn\":\"90d\"}"
 }
 
+secret_key() {
+  oc get secret "$1" -n "$2" -o jsonpath='{.data.api-key}' 2>/dev/null | base64 -d || true
+}
+
+maas_key_works() {
+  local key="$1"
+  [[ -n "${key}" ]] || return 1
+  local code
+  code=$(curl -sk -o /dev/null -w "%{http_code}" -m 15 \
+    -H "Authorization: Bearer ${key}" \
+    "https://maas.${CLUSTER_DOMAIN}/models-as-a-service/llama-3-1-8b-fp8/v1/models" 2>/dev/null || echo "000")
+  [[ "${code}" == "200" ]]
+}
+
 echo "   Creating Dev Spaces API key (owner=${KEY_OWNER})..."
-DEVSPACES_RESP=$(mint_maas_key "devspaces-key" "devspaces-subscription" '["devspaces-users"]')
-DEVSPACES_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${DEVSPACES_RESP}" 2>/dev/null || echo "")
-if [[ -z "${DEVSPACES_KEY}" ]]; then
-  echo "   Dev Spaces key response: ${DEVSPACES_RESP}"
+DEVSPACES_KEY="$(secret_key devspaces-maas-apikey openshift-devspaces)"
+if maas_key_works "${DEVSPACES_KEY}"; then
+  echo "   Reusing existing Dev Spaces API key (still valid)."
+else
+  DEVSPACES_RESP=$(mint_maas_key "devspaces-key" "devspaces-subscription" '["devspaces-users"]')
+  DEVSPACES_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${DEVSPACES_RESP}" 2>/dev/null || echo "")
+  if [[ -z "${DEVSPACES_KEY}" ]]; then
+    echo "   Dev Spaces key response: ${DEVSPACES_RESP}"
+  fi
 fi
 
 echo "   Creating Chatbot API key (owner=${KEY_OWNER})..."
-CHATBOT_RESP=$(mint_maas_key "chatbot-key" "chatbot-subscription" '["chatbot-users"]')
-CHATBOT_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${CHATBOT_RESP}" 2>/dev/null || echo "")
-if [[ -z "${CHATBOT_KEY}" ]]; then
-  echo "   Chatbot key response: ${CHATBOT_RESP}"
+CHATBOT_KEY="$(secret_key chatbot-maas-apikey open-webui)"
+if maas_key_works "${CHATBOT_KEY}"; then
+  echo "   Reusing existing Chatbot API key (still valid)."
+else
+  CHATBOT_RESP=$(mint_maas_key "chatbot-key" "chatbot-subscription" '["chatbot-users"]')
+  CHATBOT_KEY=$(python3 -c "import sys,json; print(json.loads(sys.argv[1]).get('key',''))" "${CHATBOT_RESP}" 2>/dev/null || echo "")
+  if [[ -z "${CHATBOT_KEY}" ]]; then
+    echo "   Chatbot key response: ${CHATBOT_RESP}"
+  fi
 fi
 
 echo "8. Storing API keys in secrets..."
