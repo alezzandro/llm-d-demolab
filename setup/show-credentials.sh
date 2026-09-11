@@ -48,6 +48,14 @@ echo "Buttons: unique vs shared prefix TTFT + canned EPP chart"
 echo "Leave-behind markdown: docs/assets/baseline-comparison.md"
 
 echo ""
+echo "--- Gen AI Playground (trusted in-cluster path, bypasses MaaS) ---"
+echo "OpenShift AI → Gen AI studio → Playground"
+echo "Project: models-as-a-service"
+echo "OGXServer: ogx-genai-playground (CPU; HTTPS ClusterIP to llm-d, bypasses MaaS)"
+echo "Prompt: Write a short Ansible task to install and start nginx on RHEL 9"
+echo "Optional MCP: How many pods are running in models-as-a-service?"
+
+echo ""
 echo "--- API Keys ---"
 DEVSPACES_KEY=$(oc get secret devspaces-maas-apikey -n openshift-devspaces -o jsonpath='{.data.api-key}' 2>/dev/null | base64 -d || echo "N/A")
 CHATBOT_KEY=$(oc get secret chatbot-maas-apikey -n open-webui -o jsonpath='{.data.api-key}' 2>/dev/null | base64 -d || echo "N/A")

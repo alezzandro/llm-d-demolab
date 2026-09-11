@@ -1,0 +1,71 @@
+apiVersion: ogx.io/v1beta1
+kind: OGXServer
+metadata:
+  name: ogx-genai-playground
+  namespace: models-as-a-service
+  annotations:
+    openshift.io/display-name: Gen AI Playground
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  # OpenShift AI 3.5 renamed LlamaStackDistribution → OGXServer.
+  # https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_ogx/llama-stack-to-ogx-migration_rag
+  distribution:
+    name: rh
+  # rh strips inline sentence-transformers/faiss; Playground CreateVectorStore
+  # needs granite-embedding-125m. overrideConfig skips OCI label fetch.
+  overrideConfig:
+    name: ogx-playground-config
+    key: config.yaml
+  network:
+    externalAccess:
+      enabled: false
+  workload:
+    replicas: 1
+    storage:
+      size: 20Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 500Mi
+      limits:
+        cpu: "2"
+        memory: 12Gi
+    overrides:
+      env:
+        # Direct ClusterIP to llm-d — Playground is a trusted in-cluster client
+        # and bypasses MaaS (same pattern as ocp-maas-devspaces-chatbot).
+        # KServe marks the workload Service appProtocol=https (self-signed).
+        - name: VLLM_URL
+          value: https://llama-3-1-8b-fp8-kserve-workload-svc.models-as-a-service.svc.cluster.local:8000/v1
+        - name: INFERENCE_MODEL
+          value: llama-3-1-8b-instruct-fp8
+        - name: VLLM_TLS_VERIFY
+          value: "false"
+        - name: VLLM_MAX_TOKENS
+          value: "2048"
+        - name: VLLM_API_TOKEN
+          value: fake
+        # Baked in odh-ogx-core: /opt/app-root/.cache/huggingface/hub/models--ibm-granite--granite-embedding-125m-english
+        # Operator default HF_HOME=/.ogx would miss that cache and re-download.
+        - name: HF_HOME
+          value: /opt/app-root/.cache/huggingface
+        - name: EMBEDDING_MODEL
+          value: ibm-granite/granite-embedding-125m-english
+        - name: EMBEDDING_PROVIDER
+          value: sentence-transformers
+        - name: EMBEDDING_PROVIDER_MODEL_ID
+          value: ibm-granite/granite-embedding-125m-english
+        - name: POSTGRES_HOST
+          value: ogx-postgres.models-as-a-service.svc.cluster.local
+        - name: POSTGRES_PORT
+          value: "5432"
+        - name: POSTGRES_DB
+          value: ogx
+        - name: POSTGRES_USER
+          value: ogx
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ogx-postgres-credentials
+              key: password

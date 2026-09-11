@@ -127,7 +127,10 @@ oc patch odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
 echo "   Dashboard: Gen AI Studio, MCP catalog/registry, agents, AutoRAG, guardrails,"
 echo "   tracing, AutoML, llm-d templates, Eval Hub, tool calling, external models."
 
-echo "5. Creating HardwareProfile for L4 GPU..."
+echo "5. Creating MCP servers ConfigMap for Gen AI Playground..."
+oc apply -f "${MANIFESTS_DIR}/rhoai-config/mcp-servers-configmap.yaml"
+
+echo "6. Creating HardwareProfile for L4 GPU..."
 # Replace avoids stale last-applied fields from the pre-3.4 profile shape
 # (displayName/enabled/nodeSelectors at spec root were dropped by the CRD).
 oc delete hardwareprofile gpu-l4-nvidia -n redhat-ods-applications --ignore-not-found
@@ -143,7 +146,7 @@ else
   echo "   OpenShift AI Deployments edit form can render empty without a valid profile."
 fi
 
-echo "6. Waiting for ModelsAsServiceReady condition..."
+echo "7. Waiting for ModelsAsServiceReady condition..."
 TIMEOUT=300
 INTERVAL=15
 ELAPSED=0
@@ -167,7 +170,7 @@ while true; do
   ELAPSED=$((ELAPSED + INTERVAL))
 done
 
-echo "7. Waiting for control-plane DSC components (up to 180s)..."
+echo "8. Waiting for control-plane DSC components (up to 180s)..."
 # Condition type names vary slightly by CSV; match on substring.
 wait_dsc_ready_substring() {
   local label="$1"

@@ -59,7 +59,7 @@ models-as-a-service control plane):
     ↓ labeled "subscription quota + auth policy check"
   Box: "Kuadrant" — enforces token rate limits per subscription
     ↓ labeled "policy pass → route to model backend"
-  Box: "MaaSModelRef (llama-3-1-8b)" — registers the model pool with MaaS
+  Box: "MaaSModelRef (llama-3-1-8b-fp8)" — registers the model pool with MaaS
     Small note: "links LLMInferenceService to MaaS catalog entry"
 
 Draw a solid downward arrow from the merged consumer path into

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/ensure-authenticated.sh"
 
 LLM_NAME="llama-3-1-8b-fp8"
-MAAS_REF_NAME="llama-3-1-8b"
+MAAS_REF_NAME="llama-3-1-8b-fp8"
 EXPECTED_REPLICAS=4
 EXPECTED_GPU_NODES=4
 
@@ -143,6 +143,21 @@ check "DSC AI Pipelines Managed" "$([ "${PIPE}" == "Managed" ] && echo true || e
 check "DSC TrustyAI Managed" "$([ "${TRUSTY}" == "Managed" ] && echo true || echo false)"
 check "DSC MLflow Managed" "$([ "${MLFLOW}" == "Managed" ] && echo true || echo false)"
 check "DSC Ray still Removed" "$([ "${RAY}" == "Removed" ] && echo true || echo false)"
+
+echo ""
+echo "8. Gen AI Playground..."
+OGX_SRV=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+  -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+if [[ -z "${OGX_SRV}" ]]; then
+  OGX_SRV=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "missing")
+fi
+check "OGXServer Ready" "$([[ "${OGX_SRV}" == "Ready" || "${OGX_SRV}" == "True" ]] && echo true || echo false)"
+PG_OK=$(oc get pod -n models-as-a-service -l app=ogx-postgres --no-headers 2>/dev/null | awk '$2=="1/1" && $3=="Running" {c++} END {print c+0}')
+check "OGX PostgreSQL Running" "$([[ "${PG_OK}" -ge 1 ]] && echo true || echo false)"
+MCP_OK=$(oc get mcpserver openshift-mcp-server -n models-as-a-service \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+check "OpenShift MCP Server Ready" "$([ "${MCP_OK}" == "True" ] && echo true || echo false)"
 
 echo ""
 echo "========================================="

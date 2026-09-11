@@ -31,12 +31,17 @@ oc delete checluster devspaces -n openshift-devspaces --ignore-not-found 2>/dev/
 echo "4. Removing MaaS subscriptions and policies..."
 oc delete -k "${REPO_ROOT}/manifests/subscriptions/" --ignore-not-found 2>/dev/null || true
 
-echo "5. Removing model deployment + benchmark jobs..."
+echo "5. Removing model deployment + benchmark jobs + Playground..."
 oc delete job guidellm-llmd-short -n models-as-a-service --ignore-not-found 2>/dev/null || true
 oc delete pvc benchmark-data -n models-as-a-service --ignore-not-found 2>/dev/null || true
+oc delete -k "${REPO_ROOT}/manifests/playground/" --ignore-not-found 2>/dev/null || true
+oc delete secret ogx-postgres-credentials -n models-as-a-service --ignore-not-found 2>/dev/null || true
+oc delete pvc postgres-data-ogx-postgres-0 ogx-genai-playground-pvc -n models-as-a-service --ignore-not-found 2>/dev/null || true
+oc delete configmap gen-ai-aa-mcp-servers -n redhat-ods-applications --ignore-not-found 2>/dev/null || true
+oc delete clusterrolebinding mcp-viewer-models-as-a-service --ignore-not-found 2>/dev/null || true
 oc delete -k "${REPO_ROOT}/manifests/model/" --ignore-not-found 2>/dev/null || true
 oc delete llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service --ignore-not-found 2>/dev/null || true
-oc delete maasmodelref llama-3-1-8b -n models-as-a-service --ignore-not-found 2>/dev/null || true
+oc delete maasmodelref llama-3-1-8b-fp8 llama-3-1-8b -n models-as-a-service --ignore-not-found 2>/dev/null || true
 
 echo "6. Removing model registry..."
 oc delete -f "${REPO_ROOT}/manifests/model-registry/mysql/mysql.yaml" --ignore-not-found 2>/dev/null || true

@@ -16,6 +16,7 @@ Two independent consumers share one governed model pool:
 | Models-as-a-Service | OpenShift AI 3.5 | Dual subscriptions, API keys, rate limits, cost centers |
 | Dev consumer | Dev Spaces + Continue | Cloud IDE wired to MaaS |
 | Ops consumer | Open WebUI | Chat UI on a second MaaS subscription |
+| Playground | Gen AI Studio + OGX | Prompt chat on the same llm-d pool (in-cluster, bypasses MaaS) |
 | Tail-latency story | Prefix Cache Lab UI + EPP leave-behind | Live unique vs shared TTFT; canned EPP P95 chart |
 
 ## Quick Start
@@ -61,7 +62,7 @@ See [docs/prerequisites.md](docs/prerequisites.md). In-cluster kickoff: [docs/bo
 | 3 | `03-maas-platform.sh` | MaaS Postgres / TLS |
 | 4 | `04-rhoai-config.sh` | DataScienceCluster + HardwareProfile + OpenShift AI 3.5 dashboard flags (Gen AI Studio, MCP, llm-d templates, Eval Hub) and control-plane operators (OGX, AI Pipelines, TrustyAI, MLflow) |
 | 5 | `05-model-registry.sh` | Register Llama 3.1 8B Instruct FP8 |
-| 6 | `06-deploy-llmd-model.sh` | llm-d `LLMInferenceService` (4 replicas) + `MaaSModelRef` |
+| 6 | `06-deploy-llmd-model.sh` | llm-d `LLMInferenceService` (4 replicas) + `MaaSModelRef` + Gen AI Playground (`OGXServer` + OpenShift MCP) |
 | 7 | `07-verify-maas-llmd.sh` | End-to-end MaaS + llm-d checks |
 | 8 | `08-setup-subscriptions.sh` | Dual subscriptions + API keys |
 | 9 | `09-deploy-devspaces.sh` | CheCluster + Continue config |
@@ -92,11 +93,11 @@ P95 leave-behind: [docs/assets/baseline-comparison.md](docs/assets/baseline-comp
 - Prefix Cache Lab image is built from UBI9 (`apps/prefix-cache-lab/Containerfile`).
 - In-cluster bootstrapper image is UBI9 (`apps/demo-bootstrapper/Containerfile`, `quay.io/aarrichi/rh-demo-bootstrapper:ubi9-1`).
 - The RHOAI Subscription uses channel `stable-3.x` (currently **3.5.0**). Setup scripts discover KServe presets and MaaS CRs at runtime — see [architecture notes](docs/architecture.md#validated-on-openshift-ai-350).
-- Phase 4 enables OpenShift AI 3.5 dashboard features and control-plane operators. It does **not** start AutoML, training, or extra GPU playground servers (those would steal the 4× L4 llm-d pool).
+- Phase 4 enables OpenShift AI 3.5 dashboard features and control-plane operators. Phase 6 deploys a **CPU** `OGXServer`, PostgreSQL, and OpenShift MCP for Gen AI Playground; it does **not** start AutoML or training jobs (those would steal the 4× L4 llm-d pool).
 
 ## Documentation References
 
 - [OpenShift AI 3.5](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/)
 - [Govern LLM access with Models-as-a-Service (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/)
-- [KServe + llm-d](https://developers.redhat.com/articles/2026/04/21/kserve-llm-d-optimized-gen-ai-inference)
+- [Experimenting with models in the gen AI playground (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/experimenting_with_models_in_the_gen_ai_playground/index)
 - [MaaS on OpenShift](https://developers.redhat.com/articles/2026/03/24/run-model-service-multiple-llms-openshift)

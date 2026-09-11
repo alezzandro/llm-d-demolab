@@ -13,9 +13,12 @@ metadata:
     # Links to manifests/model/oci-connection.yaml — required for Deployments Edit wizard
     opendatahub.io/connections: llama-3-1-8b-fp8-connection
     openshift.io/display-name: llama-3-1-8b-fp8-llm-d
-    # MaaS owns gateway AuthPolicy (API keys). enable-auth=true makes
-    # odh-model-controller attach {gateway}-authn and override MaaS.
-    security.opendatahub.io/enable-auth: "false"
+    # MaaS owns gateway AuthPolicy (API keys). Keep the Gateway annotated
+    # opendatahub.io/managed=false so odh-model-controller does not attach
+    # {gateway}-authn. enable-auth must be "true": "false" installs anonymous
+    # *-kserve-route-authn on the HTTPRoute, which wipes auth.identity so
+    # Limitador never increments and the Usage dashboard stays at 0.
+    security.opendatahub.io/enable-auth: "true"
     prometheus.io/path: /metrics
     prometheus.io/port: "8000"
 spec:

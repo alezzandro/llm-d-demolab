@@ -16,11 +16,12 @@ MaaS decides **who** can use the model and **how much**; llm-d makes the **same 
 | Catalog / Registry | 1–2 min | OpenShift AI → Catalog → Llama 3.1 8B FP8 → Registry version / ModelCar |
 | MaaS | 2 min | Two subscriptions, keys, rate limits, cost centers |
 | llm-d | 2–3 min | Physics (no click) → Prefix Cache Lab **Run comparison** → EPP leave-behind chart |
+| Playground | 1–2 min | Gen AI Studio chat on the same llm-d pool (bypasses MaaS) |
 | Dev Spaces | 2–3 min | Continue chat / autocomplete on sample Ansible |
 | Open WebUI | 1–2 min | Ops chatbot on second subscription |
 | Close | 30s | Govern access (MaaS) + optimize GPUs (llm-d) |
 
-**Short path (~5 min):** Hook → Prefix Cache Lab (all three llm-d layers) → Dev Spaces → Close.
+**Short path (~6 min):** Hook → Prefix Cache Lab → Playground → Close.
 
 **Do not during booth hours:** AutoML, training jobs, long GuideLLM runs, scaling the `LLMInferenceService` to 0, enabling InferencePool/EPP on the live MaaS path.
 
@@ -39,6 +40,7 @@ bash setup/show-credentials.sh
 - [ ] Open WebUI admin account created; model responds **without** builtin tool cards (`grep_knowledge_files`)
 - [ ] Prefix Cache Lab Route loads; dry-run **Run comparison** once before the floor opens
 - [ ] Lab tab stays open; **Reset results** between visitors
+- [ ] Gen AI Studio → Playground loads in project `models-as-a-service` (OGXServer Ready)
 
 ---
 
@@ -174,7 +176,29 @@ Full table: [docs/assets/baseline-comparison.md](assets/baseline-comparison.md).
 
 ---
 
-### 5. Dev Spaces consumer (2–3 min)
+### 5. Gen AI Playground (1–2 min)
+
+**Navigate:** OpenShift AI → **Gen AI studio** → **Playground** → project **models-as-a-service**.
+
+If the playground is not created yet: **Create playground** (or **Add to playground** from AI asset endpoints) and pick Llama 3.1 8B Instruct FP8 as Inference.
+
+Prompt: **“Write a short Ansible task to install and start nginx on Red Hat Enterprise Linux 9.”**
+
+Optional MCP (OpenShift MCP is read-only): **“How many pods are running in models-as-a-service?”**
+
+**Say this**
+
+> Same four GPUs, but this path is the **platform Playground** — OGX talks to vLLM on the cluster network. Dev Spaces and Open WebUI go through **MaaS** so we can meter and limit them. Trusted in-cluster tools versus multi-tenant consumption.
+
+**Do not say**
+
+- That Playground traffic shows up on the Usage dashboard. It bypasses Limitador on purpose.
+
+See [Experimenting with models in the gen AI playground (3.5)](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/experimenting_with_models_in_the_gen_ai_playground/index).
+
+---
+
+### 6. Dev Spaces consumer (2–3 min)
 
 Deep-link / open the **pre-warmed** workspace → Continue chat or tab-complete on `sample-playbooks/`.
 
@@ -188,7 +212,7 @@ If Continue is cold, type in chat rather than waiting on autocomplete.
 
 ---
 
-### 6. Open WebUI consumer (1–2 min)
+### 7. Open WebUI consumer (1–2 min)
 
 Prompt: “Generate an Ansible playbook to restart a failed Deployment and notify Slack.”
 
@@ -200,7 +224,7 @@ Open WebUI 0.10+ Native mode is disabled (`function_calling: legacy`) so the 8B 
 
 ---
 
-### 7. Close (30s)
+### 8. Close (30s)
 
 > MaaS = who and how much. llm-d = how fast on the GPUs you already bought. Together: governed, multi-tenant, production-shaped inference on OpenShift AI 3.5.
 
@@ -210,14 +234,14 @@ Hand them: Catalog → Registry → 4× `LLMInferenceService` → dual subscript
 
 ## Optional: what’s new in OpenShift AI 3.5 (60–90s)
 
-Only if the visitor asks. **Not** the default 8–12 min path. Phase 4 enables the dashboard flags and control-plane operators (OGX, AI Pipelines, TrustyAI, MLflow). It does **not** deploy sample MCP servers, an OGX playground server, or AutoML jobs — those would compete with the four L4s.
+Only if the visitor asks. **Not** the default 8–12 min path. Phase 4 enables the dashboard flags and control-plane operators (OGX, AI Pipelines, TrustyAI, MLflow). Playground itself is deployed (CPU `OGXServer` + OpenShift MCP). Do **not** start AutoML or training jobs — those would compete with the four L4s.
 
 Glance, then return to MaaS + llm-d:
 
 | If they ask | Open | One line |
 |---|---|---|
-| Gen AI Studio / Playground | Gen AI studio | Experiment with prompts/RAG before you productize; Playground needs OGX. [Docs](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/experimenting_with_models_in_the_gen_ai_playground/playground-prerequisites_rhoai-user) |
-| MCP / agents | AI hub → MCP servers | Catalog + registry for tools; empty until you deploy a server |
+| Gen AI Studio / Playground | Gen AI studio | Prompt chat on the llm-d pool; MCP optional. Default beat is §5. [Docs](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/experimenting_with_models_in_the_gen_ai_playground/playground-prerequisites_rhoai-user) |
+| MCP / agents | AI hub → MCP servers | OpenShift MCP is deployed; Fetch / Sequential-Thinking listed in the catalog ConfigMap |
 | llm-d templates | Deployments wizard / Settings | Topology and routing fields (`llmdTemplates`); live booth still uses Service LB |
 | Eval Hub | Develop & train → Evaluations | TrustyAI / LMEval nav is on; do not start a GPU eval during the show |
 
@@ -234,7 +258,8 @@ Glance, then return to MaaS + llm-d:
 | Is this the MaaS-only demo? | That used 1 replica and no llm-d beat. This is MaaS plus a real 4-replica pool. |
 | Why is EPP not live? | InferencePool through MaaS returned empty chat bodies (3.4.2 dry-run). Re-validate upstream before putting it on the booth path. |
 | Deployments → Edit is blank | Open Edit from the action menu (React Router state). Hard-refreshing `/ai-hub/models/deployments/deploy` is always create. Needs `opendatahub.io/connections` + OCI connection Secret (phase 06). |
-| Why is Gen AI Studio empty? | Flags and OGX operator are on. We did not deploy an `OGXServer` or MCP servers so they cannot steal GPUs from llm-d. |
+| Why is Gen AI Studio empty? | Confirm `OGXServer/ogx-genai-playground` is Ready and you selected project `models-as-a-service`. Create playground once if the UI has no instance yet. |
+| Does Playground count on Usage? | **No.** OGX talks to vLLM over ClusterIP and bypasses Limitador on purpose. |
 | Can we run AutoML / training? | Not during booth hours. Ray / Kueue / TrainingOperator stay Removed so the four L4s stay on the model. |
 
 ---

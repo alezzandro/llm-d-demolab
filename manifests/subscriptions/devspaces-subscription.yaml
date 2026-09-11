@@ -5,7 +5,7 @@ metadata:
   namespace: models-as-a-service
 spec:
   modelRefs:
-    - name: llama-3-1-8b
+    - name: llama-3-1-8b-fp8
       namespace: models-as-a-service
       tokenRateLimits:
         - limit: 50000

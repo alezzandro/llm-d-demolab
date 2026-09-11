@@ -109,11 +109,14 @@ if [[ "${LLM_STUCK_COUNT}" -gt 0 ]]; then
   check_warn "Leftover inference pod(s) not Running (${LLM_STUCK_COUNT}): leftover Init/Unknown after node drain — --fix force-deletes them"
 fi
 
-MAAS_REF=$(oc get maasmodelref llama-3-1-8b -n models-as-a-service -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+MAAS_REF=$(oc get maasmodelref llama-3-1-8b-fp8 -n models-as-a-service -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
 if [[ "$MAAS_REF" == "Ready" ]]; then
-  check_pass "MaaSModelRef: Ready"
+  check_pass "MaaSModelRef llama-3-1-8b-fp8: Ready"
 else
-  check_fail "MaaSModelRef: $MAAS_REF"
+  check_fail "MaaSModelRef llama-3-1-8b-fp8: $MAAS_REF (name must match the inference URL path)"
+fi
+if oc get maasmodelref llama-3-1-8b -n models-as-a-service &>/dev/null; then
+  check_warn "Leftover MaaSModelRef llama-3-1-8b (Usage 403s on /llama-3-1-8b-fp8/ path); --fix retargets subscriptions"
 fi
 echo ""
 
@@ -124,6 +127,35 @@ if [[ "$GW_STATUS" == "True" ]]; then
   check_pass "Gateway: Programmed"
 else
   check_fail "Gateway not Programmed: $GW_STATUS"
+fi
+ENABLE_AUTH=$(oc get llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service \
+  -o jsonpath='{.metadata.annotations.security\.opendatahub\.io/enable-auth}' 2>/dev/null || echo "")
+if [[ "${ENABLE_AUTH}" == "true" ]]; then
+  check_pass "LLMInferenceService enable-auth=true (no anonymous route AuthPolicy)"
+else
+  check_fail "LLMInferenceService enable-auth=${ENABLE_AUTH:-unset} (anonymous *-kserve-route-authn zeros Usage); --fix sets true"
+fi
+if oc get authpolicy llama-3-1-8b-fp8-kserve-route-authn -n models-as-a-service &>/dev/null; then
+  check_fail "AuthPolicy llama-3-1-8b-fp8-kserve-route-authn present (wipes MaaS identity; Usage stays 0); --fix deletes it"
+else
+  check_pass "No competing HTTPRoute AuthPolicy"
+fi
+MAAS_AUTH_ENF=$(oc get authpolicy maas-gateway-auth -n openshift-ingress \
+  -o jsonpath='{.status.conditions[?(@.type=="Enforced")].status}' 2>/dev/null || echo "Unknown")
+MAAS_AUTH_MSG=$(oc get authpolicy maas-gateway-auth -n openshift-ingress \
+  -o jsonpath='{.status.conditions[?(@.type=="Enforced")].message}' 2>/dev/null || echo "")
+if [[ "${MAAS_AUTH_ENF}" == "True" && "${MAAS_AUTH_MSG}" != *"partially"* ]]; then
+  check_pass "maas-gateway-auth: Enforced"
+else
+  check_fail "maas-gateway-auth Enforced=${MAAS_AUTH_ENF} (${MAAS_AUTH_MSG:-no message})"
+fi
+CONFLICT_TRUE=$(oc get maasauthpolicy -n models-as-a-service \
+  -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="ConflictingAuthPolicy")].status}{"\n"}{end}' \
+  2>/dev/null | grep -c True || true)
+if [[ "${CONFLICT_TRUE}" -gt 0 ]]; then
+  check_fail "MaaSAuthPolicy ConflictingAuthPolicy=True (competing AuthPolicy); --fix removes it"
+else
+  check_pass "MaaSAuthPolicy: no conflicting AuthPolicies"
 fi
 echo ""
 
@@ -151,8 +183,59 @@ else
 fi
 echo ""
 
-# ─── 6. Open WebUI ──────────────────────────────────────────────────────────────
-echo "6. Open WebUI (Chatbot)"
+# ─── 6. Gen AI Playground ───────────────────────────────────────────────────────
+echo "6. Gen AI Playground"
+OGX_PHASE=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+  -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+if [[ -z "${OGX_PHASE}" ]]; then
+  OGX_PHASE=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+    -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "missing")
+fi
+if [[ "${OGX_PHASE}" == "Ready" || "${OGX_PHASE}" == "True" ]]; then
+  check_pass "OGXServer ogx-genai-playground: Ready"
+else
+  check_fail "OGXServer ogx-genai-playground: ${OGX_PHASE} (Playground needs this; --fix applies manifests)"
+fi
+PG_READY=$(oc get pod -n models-as-a-service -l app=ogx-postgres --no-headers 2>/dev/null | awk '$2=="1/1" && $3=="Running" {c++} END {print c+0}')
+if [[ "${PG_READY}" -ge 1 ]]; then
+  check_pass "OGX PostgreSQL: Running"
+else
+  check_fail "OGX PostgreSQL not Running (rh distro needs POSTGRES_*; --fix applies postgres.yaml)"
+fi
+MCP_READY=$(oc get mcpserver openshift-mcp-server -n models-as-a-service \
+  -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+if [[ "${MCP_READY}" == "True" ]]; then
+  check_pass "OpenShift MCP Server: Ready"
+else
+  check_warn "OpenShift MCP Server: ${MCP_READY}"
+fi
+if oc get configmap gen-ai-aa-mcp-servers -n redhat-ods-applications &>/dev/null; then
+  check_pass "MCP catalog ConfigMap gen-ai-aa-mcp-servers present"
+else
+  check_warn "MCP catalog ConfigMap missing (Playground MCP list empty); --fix applies it"
+fi
+OGX_POD=$(oc get pod -n models-as-a-service -l app=ogx --field-selector=status.phase=Running \
+  -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+if [[ -n "${OGX_POD}" ]]; then
+  OGX_MODELS=$(oc exec -n models-as-a-service "${OGX_POD}" -- \
+    curl -sS -m 8 http://127.0.0.1:8321/v1/models 2>/dev/null || echo "")
+  if echo "${OGX_MODELS}" | grep -q 'llama-3-1-8b-instruct-fp8'; then
+    check_pass "OGX lists llama-3-1-8b-instruct-fp8 (HTTPS ClusterIP to llm-d)"
+  else
+    check_fail "OGX /v1/models missing llama-3-1-8b-instruct-fp8 (need https:// workload svc + VLLM_TLS_VERIFY=false)"
+  fi
+  if echo "${OGX_MODELS}" | grep -q 'granite-embedding-125m-english'; then
+    check_pass "OGX lists granite-embedding-125m-english (Playground vector store)"
+  else
+    check_fail "OGX /v1/models missing granite-embedding-125m-english (Playground CreateVectorStore popup)"
+  fi
+else
+  check_fail "No Running OGX pod to query /v1/models"
+fi
+echo ""
+
+# ─── 7. Open WebUI ──────────────────────────────────────────────────────────────
+echo "7. Open WebUI (Chatbot)"
 WEBUI_READY=$(oc get deploy open-webui -n open-webui -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
 if [[ "$WEBUI_READY" -ge 1 ]]; then
   check_pass "Open WebUI: Running"
@@ -168,7 +251,7 @@ fi
 echo ""
 
 # ─── 7. Dev Spaces ──────────────────────────────────────────────────────────────
-echo "7. OpenShift Dev Spaces"
+echo "8. OpenShift Dev Spaces"
 CHE_PHASE=$(oc get checluster devspaces -n openshift-devspaces -o jsonpath='{.status.chePhase}' 2>/dev/null || echo "Unknown")
 if [[ "$CHE_PHASE" == "Active" ]]; then
   check_pass "CheCluster: Active"
@@ -206,7 +289,7 @@ fi
 echo ""
 
 # ─── 8. Model Registry ──────────────────────────────────────────────────────────
-echo "8. Model Registry"
+echo "9. Model Registry"
 MR_PODS=$(oc get pods -n rhoai-model-registries --no-headers 2>/dev/null | grep -c "Running" || true)
 if [[ "$MR_PODS" -ge 1 ]]; then
   check_pass "Model Registry API: Running"
@@ -216,7 +299,7 @@ fi
 echo ""
 
 # ─── 9. MaaS endpoint test ──────────────────────────────────────────────────────
-echo "9. MaaS Endpoint Test"
+echo "10. MaaS Endpoint Test"
 TOKEN=$(oc whoami -t)
 HTTP_CODE=$(timeout 10 curl -sk -o /dev/null -w "%{http_code}" \
   "${MAAS_URL}/models-as-a-service/llama-3-1-8b-fp8/v1/models" \
@@ -232,7 +315,7 @@ fi
 echo ""
 
 # ─── 10. Prefix Cache Lab UI ────────────────────────────────────────────────────
-echo "10. Prefix Cache Lab UI"
+echo "11. Prefix Cache Lab UI"
 LAB_READY=$(oc get deploy prefix-cache-lab -n prefix-cache-lab -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
 if [[ "${LAB_READY:-0}" -ge 1 ]]; then
   check_pass "Prefix Cache Lab: Running"
@@ -254,7 +337,7 @@ fi
 echo ""
 
 # ─── 11. OpenShift AI 3.5 dashboard / control plane (warn only) ─────────────────
-echo "11. OpenShift AI 3.5 dashboard features"
+echo "12. OpenShift AI 3.5 dashboard features"
 dash_flag() {
   oc get odhdashboardconfig odh-dashboard-config -n redhat-ods-applications \
     -o jsonpath="{.spec.dashboardConfig.${1}}" 2>/dev/null || echo ""
@@ -320,7 +403,7 @@ fi
 echo ""
 
 # ─── 12. In-cluster demo bootstrapper (optional) ────────────────────────────────
-echo "12. Demo bootstrapper (optional)"
+echo "13. Demo bootstrapper (optional)"
 if oc get ns rh-demo-bootstrapper &>/dev/null; then
   BS_READY=$(oc get deploy demo-bootstrapper -n rh-demo-bootstrapper -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
   if [[ "${BS_READY:-0}" -ge 1 ]]; then
@@ -496,6 +579,53 @@ spec:
   externalName: data-science-perses.redhat-ods-monitoring.svc.cluster.local
 EOF
   fi
+
+  # Fix 6b: Usage dashboard zeros — anonymous HTTPRoute AuthPolicy wipes
+  # auth.identity so Limitador never increments authorized_hits/_calls.
+  # MaaSModelRef name must match the inference URL path (LLMInferenceService).
+  echo ""
+  echo ">>> Restoring MaaS identity for Usage metrics (enable-auth=true, drop competing AuthPolicies)..."
+  oc annotate gateway maas-default-gateway -n openshift-ingress \
+    opendatahub.io/managed=false --overwrite 2>/dev/null || true
+  oc annotate llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service \
+    security.opendatahub.io/enable-auth=true --overwrite 2>/dev/null || true
+  oc delete authpolicy maas-default-gateway-authn -n openshift-ingress --ignore-not-found || true
+  oc delete authpolicy llama-3-1-8b-fp8-kserve-route-authn -n models-as-a-service --ignore-not-found || true
+  if [[ -f "${REPO_ROOT}/manifests/model/maas-model-ref.yaml" ]]; then
+    oc apply -f "${REPO_ROOT}/manifests/model/maas-model-ref.yaml" 2>/dev/null || true
+  fi
+  for sub in chatbot-subscription devspaces-subscription; do
+    CUR=$(oc get maassubscription "${sub}" -n models-as-a-service \
+      -o jsonpath='{.spec.modelRefs[0].name}' 2>/dev/null || echo "")
+    if [[ -n "${CUR}" && "${CUR}" != "llama-3-1-8b-fp8" ]]; then
+      oc patch maassubscription "${sub}" -n models-as-a-service --type json \
+        -p '[{"op":"replace","path":"/spec/modelRefs/0/name","value":"llama-3-1-8b-fp8"}]' \
+        2>/dev/null || true
+    fi
+  done
+  for pol in chatbot-access devspaces-access; do
+    CUR=$(oc get maasauthpolicy "${pol}" -n models-as-a-service \
+      -o jsonpath='{.spec.modelRefs[0].name}' 2>/dev/null || echo "")
+    if [[ -n "${CUR}" && "${CUR}" != "llama-3-1-8b-fp8" ]]; then
+      oc patch maasauthpolicy "${pol}" -n models-as-a-service --type json \
+        -p '[{"op":"replace","path":"/spec/modelRefs/0/name","value":"llama-3-1-8b-fp8"}]' \
+        2>/dev/null || true
+    fi
+  done
+  oc delete maasmodelref llama-3-1-8b -n models-as-a-service --ignore-not-found || true
+
+  # Fix 6c: Gen AI Playground (CPU OGXServer + OpenShift MCP)
+  echo ""
+  echo ">>> Ensuring Gen AI Playground (OGXServer + MCP)..."
+  oc apply -f "${REPO_ROOT}/manifests/rhoai-config/mcp-servers-configmap.yaml" 2>/dev/null || true
+  if ! oc get secret ogx-postgres-credentials -n models-as-a-service &>/dev/null; then
+    oc create secret generic ogx-postgres-credentials -n models-as-a-service \
+      --from-literal=password="$(openssl rand -base64 24)" 2>/dev/null || true
+  fi
+  oc apply -f "${REPO_ROOT}/manifests/playground/postgres.yaml" 2>/dev/null || true
+  oc apply -f "${REPO_ROOT}/manifests/playground/ogx-configmap.yaml" 2>/dev/null || true
+  oc apply -f "${REPO_ROOT}/manifests/playground/ogx-server.yaml" 2>/dev/null || true
+  oc apply -f "${REPO_ROOT}/manifests/playground/openshift-mcp-server.yaml" 2>/dev/null || true
 
   # Fix 7: MaaS HTTP 503 — Envoy Kuadrant WASM fail-closed after a raced
   # gateway / kuadrant-operator restart. vLLM can be healthy while every

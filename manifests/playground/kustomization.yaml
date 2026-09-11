@@ -1,0 +1,9 @@
+# OGX postgres Secret ogx-postgres-credentials is created by setup/06 (not in git).
+# Apply postgres.yaml only after that Secret exists.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - postgres.yaml
+  - ogx-configmap.yaml
+  - ogx-server.yaml
+  - openshift-mcp-server.yaml

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 MANIFESTS_DIR="${REPO_ROOT}/manifests"
 LLM_NAME="llama-3-1-8b-fp8"
-MAAS_REF_NAME="llama-3-1-8b"
+MAAS_REF_NAME="llama-3-1-8b-fp8"
 EXPECTED_REPLICAS=4
 
 source "${SCRIPT_DIR}/ensure-authenticated.sh"
@@ -136,8 +136,58 @@ else
   echo "   WARNING: Unexpected HTTP code: ${HTTP_CODE}. Check gateway routing."
 fi
 
+echo "8. Deploying Gen AI Playground (OGXServer)..."
+# CPU-only rh distribution. Talks to llm-d over HTTPS ClusterIP (bypasses MaaS).
+# The rh image expects PostgreSQL (not sqlite). Secret is generated, not committed.
+# KServe workload Service is appProtocol=https; VLLM_TLS_VERIFY=false.
+# https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_ogx/deploying-ogx-server_rag
+if ! oc get secret ogx-postgres-credentials -n models-as-a-service &>/dev/null; then
+  oc create secret generic ogx-postgres-credentials -n models-as-a-service \
+    --from-literal=password="$(openssl rand -base64 24)"
+fi
+oc apply -f "${MANIFESTS_DIR}/playground/postgres.yaml"
+echo "   Waiting for ogx-postgres Ready..."
+oc wait pod -n models-as-a-service -l app=ogx-postgres --for=condition=Ready --timeout=180s \
+  2>/dev/null || echo "   WARNING: ogx-postgres not Ready yet."
+oc apply -f "${MANIFESTS_DIR}/playground/ogx-configmap.yaml"
+oc apply -f "${MANIFESTS_DIR}/playground/ogx-server.yaml"
+
+echo "   Waiting for OGXServer to become Ready..."
+TIMEOUT=180
+INTERVAL=10
+ELAPSED=0
+while true; do
+  PHASE=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+    -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+  if [[ -z "${PHASE}" || "${PHASE}" == "Unknown" ]]; then
+    PHASE=$(oc get ogxserver ogx-genai-playground -n models-as-a-service \
+      -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "Unknown")
+  fi
+  if [[ "${PHASE}" == "Ready" || "${PHASE}" == "True" ]]; then
+    echo "   Gen AI Playground OGXServer is Ready!"
+    break
+  fi
+  if [[ "${ELAPSED}" -ge "${TIMEOUT}" ]]; then
+    echo "   WARNING: OGXServer not Ready after ${TIMEOUT}s (phase: ${PHASE})."
+    oc get ogxserver ogx-genai-playground -n models-as-a-service -o wide 2>/dev/null || true
+    break
+  fi
+  echo "   OGXServer phase: ${PHASE} (${ELAPSED}s / ${TIMEOUT}s)"
+  sleep "${INTERVAL}"
+  ELAPSED=$((ELAPSED + INTERVAL))
+done
+
+echo "9. Deploying OpenShift MCP Server..."
+oc apply -f "${MANIFESTS_DIR}/playground/openshift-mcp-server.yaml"
+oc wait mcpserver openshift-mcp-server -n models-as-a-service \
+  --for=jsonpath='{.status.conditions[?(@.type=="Ready")].status}'=True --timeout=90s 2>/dev/null || \
+  echo "   WARNING: MCP Server not ready yet."
+echo "   OpenShift MCP Server: $(oc get mcpserver openshift-mcp-server -n models-as-a-service -o jsonpath='{.status.address.url}' 2>/dev/null || echo 'pending')"
+
 echo ""
 echo "Phase 6 complete: llm-d model deployed and exposed via MaaS."
 echo "   Model: Llama 3.1 8B Instruct FP8 (4x vLLM + prefix-cache-aware EPP)"
 echo "   MaaS Endpoint: https://maas.${CLUSTER_DOMAIN}/models-as-a-service/${LLM_NAME}/v1"
+echo "   Gen AI Playground: OGXServer ogx-genai-playground (models-as-a-service)"
+echo "   OpenShift MCP Server: openshift-mcp-server (models-as-a-service)"
 echo "========================================="

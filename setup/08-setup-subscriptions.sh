@@ -52,14 +52,18 @@ oc annotate namespace models-as-a-service \
   --overwrite
 
 echo "4. Ensuring MaaS Gateway AuthPolicy is enforced..."
-# RHOAI 3.5: odh-model-controller AuthPolicy {gateway}-authn overrides
-# maas-gateway-auth unless the Gateway is marked unmanaged.
+# RHOAI 3.5: Gateway opendatahub.io/managed=false prevents {gateway}-authn
+# from overriding maas-gateway-auth. LLMInferenceService enable-auth must
+# stay true: false creates anonymous *-kserve-route-authn, which wipes
+# auth.identity so Limitador/Usage never increment.
 # https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/govern_llm_access_with_models-as-a-service/
+# https://opendatahub-io.github.io/models-as-a-service/latest/install/troubleshooting/
 oc annotate gateway maas-default-gateway -n openshift-ingress \
   opendatahub.io/managed=false --overwrite
 oc annotate llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service \
-  security.opendatahub.io/enable-auth=false --overwrite 2>/dev/null || true
+  security.opendatahub.io/enable-auth=true --overwrite 2>/dev/null || true
 oc delete authpolicy maas-default-gateway-authn -n openshift-ingress --ignore-not-found
+oc delete authpolicy llama-3-1-8b-fp8-kserve-route-authn -n models-as-a-service --ignore-not-found
 AUTH_WAIT=90
 AUTH_ELAPSED=0
 while true; do
@@ -82,6 +86,10 @@ done
 echo "5. Applying MaaS Subscriptions..."
 oc apply -f "${MANIFESTS_DIR}/subscriptions/devspaces-subscription.yaml"
 oc apply -f "${MANIFESTS_DIR}/subscriptions/chatbot-subscription.yaml"
+# Path identity is namespace/MaaSModelRef-name. Keep the ref name equal to
+# the LLMInferenceService so /models-as-a-service/llama-3-1-8b-fp8/... matches.
+oc apply -f "${MANIFESTS_DIR}/model/maas-model-ref.yaml"
+oc delete maasmodelref llama-3-1-8b -n models-as-a-service --ignore-not-found
 
 echo "6. Applying MaaS Auth Policies..."
 oc apply -f "${MANIFESTS_DIR}/subscriptions/devspaces-auth-policy.yaml"
