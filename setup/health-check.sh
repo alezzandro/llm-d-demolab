@@ -182,10 +182,8 @@ else
 fi
 CHE_PLUGINS=$(oc get checluster devspaces -n openshift-devspaces \
   -o jsonpath='{.spec.devEnvironments.defaultPlugins}' 2>/dev/null || echo "")
-if echo "${CHE_PLUGINS}" | grep -qi continue; then
-  check_pass "CheCluster defaultPlugins includes Continue"
-else
-  check_warn "CheCluster defaultPlugins missing Continue (extension will not auto-install; re-run setup/09-deploy-devspaces.sh)"
+if echo "${CHE_PLUGINS}" | grep -qi 'open-vsx.org'; then
+  check_fail "CheCluster defaultPlugins points at Open VSX HTML (factory YAML parse fails); --fix removes it"
 fi
 VSCODE_CM_NS=$(oc get ns -l app.kubernetes.io/component=workspaces-namespace \
   -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
@@ -571,6 +569,17 @@ EOF
       oc apply -n "${ns}" -f "${REPO_ROOT}/manifests/devspaces/vscode-default-extensions.yaml" \
         2>/dev/null || true
     done <<< "${USER_NS_FIX}"
+  fi
+
+  # Open VSX HTML item URLs in defaultPlugins are fetched as Che plugin YAML
+  # and break factory start (yaml: mapping values are not allowed).
+  CHE_PLUGINS_NOW=$(oc get checluster devspaces -n openshift-devspaces \
+    -o jsonpath='{.spec.devEnvironments.defaultPlugins}' 2>/dev/null || echo "")
+  if echo "${CHE_PLUGINS_NOW}" | grep -qi 'open-vsx.org'; then
+    echo ""
+    echo ">>> Removing CheCluster defaultPlugins Open VSX URIs (they break factory YAML parse)..."
+    oc patch checluster devspaces -n openshift-devspaces --type json \
+      -p '[{"op":"remove","path":"/spec/devEnvironments/defaultPlugins"}]' 2>/dev/null || true
   fi
 
   echo ""

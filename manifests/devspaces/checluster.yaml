@@ -16,16 +16,11 @@ spec:
       pvcStrategy: per-user
     defaultNamespace:
       autoProvision: true
-    # Install Continue (and Ansible/YAML helpers) in every che-code workspace.
-    # .vscode/extensions.json in git is the project-level path; this covers
-    # workspaces started before that file is pulled.
-    # https://docs.redhat.com/en/documentation/red_hat_openshift_dev_spaces/3.29/develop-proc_automating_installation_of_vscode_extensions
-    defaultPlugins:
-      - editor: che-incubator/che-code/latest
-        plugins:
-          - https://open-vsx.org/vscode/item?itemName=Continue.continue
-          - https://open-vsx.org/vscode/item?itemName=redhat.ansible
-          - https://open-vsx.org/vscode/item?itemName=redhat.vscode-yaml
+    # Do not put Open VSX item URLs in defaultPlugins. Che fetches those URIs
+    # as Che plugin *devfiles*; HTML from open-vsx.org fails YAML parse and
+    # the factory never starts ("mapping values are not allowed in this context").
+    # Continue is installed via vscode-editor-configurations +
+    # vscode-default-extensions ConfigMaps in the user namespace (phase 9).
 ---
 apiVersion: v1
 kind: Namespace
