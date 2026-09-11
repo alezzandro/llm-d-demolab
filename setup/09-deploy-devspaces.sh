@@ -81,8 +81,40 @@ stringData:
         "prefixPercentage": 0.5
       }
     }
+  config.yaml: |
+    name: Local Assistant
+    version: 1.0.0
+    schema: v1
+    models:
+      - name: Llama 3.1 8B via MaaS (llm-d)
+        provider: openai
+        model: ${MODEL_ID}
+        apiBase: https://maas.${CLUSTER_DOMAIN}/${MAAS_MODEL_PATH}
+        apiKey: "${DEVSPACES_KEY}"
+        roles:
+          - chat
+          - edit
+          - apply
+          - autocomplete
 EOF
-echo "   Continue config Secret created (mounted to /etc/continue-config/config.json)."
+echo "   Continue config Secret created (mounted to /etc/continue-config/)."
+
+echo "4. Installing VS Code recommendations (Continue) into Dev Spaces user namespaces..."
+# che-code looks up ConfigMap vscode-editor-configurations in the *workspace*
+# namespace (e.g. admin-devspaces), not in openshift-devspaces.
+# https://docs.redhat.com/en/documentation/red_hat_openshift_dev_spaces/3.29/html/administration_guide/configuring-visual-studio-code
+USER_NS=$(oc get ns -l app.kubernetes.io/component=workspaces-namespace \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+if [[ -z "${USER_NS}" ]]; then
+  echo "   No user workspace namespaces yet. Re-run this script after the first DevWorkspace is created."
+else
+  while IFS= read -r ns; do
+    [[ -z "${ns}" ]] && continue
+    oc apply -n "${ns}" -f "${MANIFESTS_DIR}/devspaces/vscode-editor-configurations.yaml"
+    oc apply -n "${ns}" -f "${MANIFESTS_DIR}/devspaces/vscode-default-extensions.yaml"
+    echo "   Applied vscode-editor-configurations + vscode-default-extensions in ${ns}"
+  done <<< "${USER_NS}"
+fi
 
 DEVSPACES_URL=$(oc get checluster devspaces -n openshift-devspaces \
   -o jsonpath='{.status.cheURL}' 2>/dev/null || echo "")

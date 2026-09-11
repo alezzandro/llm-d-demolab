@@ -86,6 +86,14 @@ REPLICAS=$(oc get llminferenceservice "${LLM_NAME}" -n models-as-a-service \
   -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "0")
 echo "   Spec replicas: ${REPLICAS} (expected ${EXPECTED_REPLICAS})"
 
+STUCK=$(oc get pods -n models-as-a-service -l app.kubernetes.io/name="${LLM_NAME}" \
+  --no-headers 2>/dev/null | awk '$3!="Running" && $3!="Completed" {print $1}')
+if [[ -n "${STUCK}" ]]; then
+  echo "   Removing leftover Failed/Init pods from a prior node event..."
+  # shellcheck disable=SC2086
+  oc delete pod -n models-as-a-service ${STUCK} --force --grace-period=0 --ignore-not-found || true
+fi
+
 echo "5. Creating MaaSModelRef..."
 oc apply -f "${MANIFESTS_DIR}/model/maas-model-ref.yaml"
 

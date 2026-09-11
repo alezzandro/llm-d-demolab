@@ -15,7 +15,7 @@
     "recommendations": [
       "redhat.ansible",
       "redhat.vscode-yaml",
-      "continue.continue"
+      "Continue.continue"
     ]
   }
 }

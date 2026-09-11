@@ -33,10 +33,10 @@ bash setup/health-check.sh
 bash setup/show-credentials.sh
 ```
 
-- [ ] 4 GPU nodes Ready; `LLMInferenceService` Ready with `replicas: 4`
+- [ ] 4 GPU nodes Ready; `LLMInferenceService` Ready with `replicas: 4` (no leftover Init/Unknown vLLM pods)
 - [ ] `MaaSModelRef` Ready; gateway Programmed; MaaS `/v1/models` HTTP 200
-- [ ] Dev Spaces workspace **already open** (avoid 30–60s cold start)
-- [ ] Open WebUI admin account created; model responds
+- [ ] Dev Spaces workspace **already open**; Continue extension enabled globally (not just config.json)
+- [ ] Open WebUI admin account created; model responds **without** builtin tool cards (`grep_knowledge_files`)
 - [ ] Prefix Cache Lab Route loads; dry-run **Run comparison** once before the floor opens
 - [ ] Lab tab stays open; **Reset results** between visitors
 
@@ -178,6 +178,8 @@ Full table: [docs/assets/baseline-comparison.md](assets/baseline-comparison.md).
 
 Deep-link / open the **pre-warmed** workspace → Continue chat or tab-complete on `sample-playbooks/`.
 
+If Continue is missing from Extensions, reload the Dev Spaces tab. First start installs the Continue vsix about a minute after the editor process is up (`DEFAULT_EXTENSIONS`). `postStart` only copies `~/.continue/` config; the extension itself comes from ConfigMaps in the user namespace (`vscode-editor-configurations` + `vscode-default-extensions`).
+
 **Say this**
 
 > This traffic uses the **dev** subscription key. Platform engineering gets AI assist without a shadow SaaS endpoint.
@@ -189,6 +191,8 @@ If Continue is cold, type in chat rather than waiting on autocomplete.
 ### 6. Open WebUI consumer (1–2 min)
 
 Prompt: “Generate an Ansible playbook to restart a failed Deployment and notify Slack.”
+
+Open WebUI 0.10+ Native mode is disabled (`function_calling: legacy`) so the 8B model does not invent `grep_knowledge_files` calls.
 
 **Say this**
 

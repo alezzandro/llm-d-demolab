@@ -95,6 +95,20 @@ else
   check_fail "llm-d replicas: $LLM_REPLICAS_SPEC (expected 4)"
 fi
 
+LLM_RUNNING=$(oc get pods -n models-as-a-service -l app.kubernetes.io/name=llama-3-1-8b-fp8 \
+  --no-headers 2>/dev/null | awk '$3=="Running"' | wc -l)
+LLM_STUCK_PODS=$(oc get pods -n models-as-a-service -l app.kubernetes.io/name=llama-3-1-8b-fp8 \
+  --no-headers 2>/dev/null | awk '$3!="Running" && $3!="Completed" {print $1}')
+LLM_STUCK_COUNT=$(printf '%s\n' "${LLM_STUCK_PODS}" | awk 'NF' | wc -l)
+if [[ "${LLM_RUNNING}" -ge 4 ]]; then
+  check_pass "llm-d workload pods Running: ${LLM_RUNNING}"
+else
+  check_fail "llm-d workload pods Running: ${LLM_RUNNING} (expected 4)"
+fi
+if [[ "${LLM_STUCK_COUNT}" -gt 0 ]]; then
+  check_warn "Leftover inference pod(s) not Running (${LLM_STUCK_COUNT}): leftover Init/Unknown after node drain — --fix force-deletes them"
+fi
+
 MAAS_REF=$(oc get maasmodelref llama-3-1-8b -n models-as-a-service -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
 if [[ "$MAAS_REF" == "Ready" ]]; then
   check_pass "MaaSModelRef: Ready"
@@ -145,6 +159,12 @@ if [[ "$WEBUI_READY" -ge 1 ]]; then
 else
   check_fail "Open WebUI: not ready"
 fi
+WEBUI_PARAMS=$(oc set env deploy/open-webui -n open-webui --list 2>/dev/null | grep '^DEFAULT_MODEL_PARAMS=' || true)
+if echo "${WEBUI_PARAMS}" | grep -q 'legacy'; then
+  check_pass "Open WebUI function calling: legacy (no native builtin tools)"
+else
+  check_warn "Open WebUI DEFAULT_MODEL_PARAMS missing function_calling=legacy (v0.10+ injects grep_knowledge_files)"
+fi
 echo ""
 
 # ─── 7. Dev Spaces ──────────────────────────────────────────────────────────────
@@ -154,6 +174,36 @@ if [[ "$CHE_PHASE" == "Active" ]]; then
   check_pass "CheCluster: Active"
 else
   check_warn "CheCluster phase: $CHE_PHASE"
+fi
+if oc get secret continue-ai-config -n openshift-devspaces &>/dev/null; then
+  check_pass "Continue config Secret present"
+else
+  check_fail "continue-ai-config Secret missing (Continue has no MaaS endpoint)"
+fi
+CHE_PLUGINS=$(oc get checluster devspaces -n openshift-devspaces \
+  -o jsonpath='{.spec.devEnvironments.defaultPlugins}' 2>/dev/null || echo "")
+if echo "${CHE_PLUGINS}" | grep -qi continue; then
+  check_pass "CheCluster defaultPlugins includes Continue"
+else
+  check_warn "CheCluster defaultPlugins missing Continue (extension will not auto-install; re-run setup/09-deploy-devspaces.sh)"
+fi
+VSCODE_CM_NS=$(oc get ns -l app.kubernetes.io/component=workspaces-namespace \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+if [[ -z "${VSCODE_CM_NS}" ]]; then
+  check_warn "No Dev Spaces user namespace yet (create the workspace, then re-run setup/09-deploy-devspaces.sh)"
+else
+  MISSING_CM=0
+  while IFS= read -r ns; do
+    [[ -z "${ns}" ]] && continue
+    if ! oc get configmap vscode-editor-configurations -n "${ns}" &>/dev/null; then
+      MISSING_CM=$((MISSING_CM + 1))
+    fi
+  done <<< "${VSCODE_CM_NS}"
+  if [[ "${MISSING_CM}" -eq 0 ]]; then
+    check_pass "vscode-editor-configurations ConfigMap present in Dev Spaces user namespace(s)"
+  else
+    check_warn "vscode-editor-configurations missing in ${MISSING_CM} user namespace(s); --fix applies it"
+  fi
 fi
 echo ""
 
@@ -375,6 +425,17 @@ if [[ "${1:-}" == "--fix" ]]; then
     oc patch llminferenceservice llama-3-1-8b-fp8 -n models-as-a-service --type merge -p '{"spec":{"replicas":4}}'
   fi
 
+  # Fix 2b: leftover Failed/Init pods after node drain or UnexpectedAdmissionError.
+  # ReplicaSet still counts them; dashboards show Init forever. Running replicas stay.
+  STUCK_FIX=$(oc get pods -n models-as-a-service -l app.kubernetes.io/name=llama-3-1-8b-fp8 \
+    --no-headers 2>/dev/null | awk '$3!="Running" && $3!="Completed" {print $1}')
+  if [[ -n "${STUCK_FIX}" ]]; then
+    echo ""
+    echo ">>> Deleting leftover inference pods (not Running)..."
+    # shellcheck disable=SC2086
+    oc delete pod -n models-as-a-service ${STUCK_FIX} --force --grace-period=0 --ignore-not-found || true
+  fi
+
   # Fix 3: Wait for inference to become ready
   echo ""
   echo ">>> Waiting for LLM Inference Service to become Ready (up to 600s)..."
@@ -492,6 +553,24 @@ EOF
       oc set env deploy/demo-bootstrapper -n rh-demo-bootstrapper \
         DEMO_RETRY=false DEMO_SETUP_ARGS- 2>/dev/null || true
     fi
+  fi
+
+  # Fix 9: Continue auto-install ConfigMap must live in the user workspace
+  # namespace (che-code does not read it from openshift-devspaces).
+  echo ""
+  echo ">>> Applying vscode-editor-configurations (Continue) to Dev Spaces user namespaces..."
+  USER_NS_FIX=$(oc get ns -l app.kubernetes.io/component=workspaces-namespace \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+  if [[ -z "${USER_NS_FIX}" ]]; then
+    echo "    No user workspace namespaces yet"
+  else
+    while IFS= read -r ns; do
+      [[ -z "${ns}" ]] && continue
+      oc apply -n "${ns}" -f "${REPO_ROOT}/manifests/devspaces/vscode-editor-configurations.yaml" \
+        2>/dev/null || true
+      oc apply -n "${ns}" -f "${REPO_ROOT}/manifests/devspaces/vscode-default-extensions.yaml" \
+        2>/dev/null || true
+    done <<< "${USER_NS_FIX}"
   fi
 
   echo ""
